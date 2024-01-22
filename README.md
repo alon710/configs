@@ -37,3 +37,4 @@ My personal computer configurations
 - [Prettier](https://marketplace.visualstudio.com/items?itemName=esbenp.prettier-vscode)
 - [VscodeIcons](https://marketplace.visualstudio.com/items?itemName=vscode-icons-team.vscode-icons)
 - [Black Formatter](https://marketplace.visualstudio.com/items?itemName=ms-python.black-formatter)
+- [Todo Tree](https://marketplace.visualstudio.com/items?itemName=Gruntfuggly.todo-tree)
