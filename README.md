@@ -10,6 +10,7 @@ My personal computer configurations
 - [Arc Browser](https://arc.net/)
 - [Docker](https://www.docker.com/products/docker-desktop/)
 - [Oh-My-Zsh](https://ohmyz.sh/#install)
+- [K9s](https://k9scli.io/topics/install/)
 
 # Browser Extentions
 
