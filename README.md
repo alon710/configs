@@ -26,3 +26,5 @@
 | [Rectangle](https://rectangleapp.com/)                             | Window management app with keyboard shortcuts.     |
 | [Altab](https://alt-tab-macos.netlify.app/)                        | Windows-style “Alt-Tab” window switcher for macOS. |
 | [MonitorControl](https://github.com/MonitorControl/MonitorControl) | Control external monitor settings from macOS.      |
+| [Metting Bar](https://meetingbar.app/)                    | MeetingBar is a menu-bar app for your calendar meetings           |
+
