@@ -109,12 +109,13 @@ npx skills add alon710/configs -s create-pr -g     # one skill, user-level
 npx skills add alon710/configs -s '*' -g           # everything
 ```
 
-| Skill                                               | Description                                                                                                           |
-| --------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| [create-pr](./skills/create-pr)                     | Opens a PR titled with its issue id, with a user-impact-first body and a manual QA table Claude runs where it's safe. |
-| [resolve-pr-issues](./skills/resolve-pr-issues)     | Inventories every PR review thread and comment, verifies each, replies, and resolves.                                 |
-| [debug](./skills/debug)                             | Triages a concrete bug report from real logs, DB rows and deploy history to a root cause and a minimal fix.           |
-| [vercel-log-debug](./skills/vercel-log-debug)       | Pulls Vercel production error logs, ranks them, traces each to source, and writes a fix report.                       |
-| [codebase-audit](./skills/codebase-audit)           | Evidence-backed audit for dead code, duplication, over-abstraction and perf/cost wins; files tickets after approval.  |
-| [component-drilldown](./skills/component-drilldown) | Explains, fixes, or consolidates UI components: variants, usages, and repo conventions.                               |
-| [demo-video](./skills/demo-video)                   | Product demo videos as code: HTML recreating the real UI, a pure `seek(t)` on a beat grid, rendered to MP4.           |
+| Skill                                               | Description                                                                                                                                 |
+| --------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| [create-pr](./skills/create-pr)                     | Opens a PR titled with its issue id, with a user-impact-first body and a manual QA table Claude runs where it's safe.                       |
+| [resolve-pr-issues](./skills/resolve-pr-issues)     | Inventories every PR review thread and comment, verifies each, replies, and resolves.                                                       |
+| [debug](./skills/debug)                             | Triages a concrete bug report from real logs, DB rows and deploy history to a root cause and a minimal fix.                                 |
+| [vercel-log-debug](./skills/vercel-log-debug)       | Pulls Vercel production error logs, ranks them, traces each to source, and writes a fix report.                                             |
+| [codebase-audit](./skills/codebase-audit)           | Evidence-backed audit for dead code, duplication, over-abstraction and perf/cost wins; files tickets after approval.                        |
+| [component-drilldown](./skills/component-drilldown) | Explains, fixes, or consolidates UI components: variants, usages, and repo conventions.                                                     |
+| [demo-video](./skills/demo-video)                   | Product demo videos as code: HTML recreating the real UI, a pure `seek(t)` on a beat grid, rendered to MP4.                                 |
+| [design-variants](./skills/design-variants)         | Builds 4-5 genuinely different UI/UX variants of a section in the project's own design system, with real content, then implements the pick. |
