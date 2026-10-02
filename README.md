@@ -19,14 +19,14 @@
 
 ### Mac-specific Tools
 
-| Tool                                                               | Description                                        |
-| ------------------------------------------------------------------ | -------------------------------------------------- |
-| [Warp](https://app.warp.dev/get_warp)                              | Speedy, efficient terminal emulator.               |
-| [Raycast](https://www.raycast.com/)                                | Command center for quick tool access and control.  |
-| [Rectangle](https://rectangleapp.com/)                             | Window management app with keyboard shortcuts.     |
-| [Altab](https://alt-tab-macos.netlify.app/)                        | Windows-style “Alt-Tab” window switcher for macOS. |
-| [MonitorControl](https://github.com/MonitorControl/MonitorControl) | Control external monitor settings from macOS.      |
-| [Metting Bar](https://meetingbar.app/)                    | MeetingBar is a menu-bar app for your calendar meetings           |
+| Tool                                                               | Description                                             |
+| ------------------------------------------------------------------ | ------------------------------------------------------- |
+| [Warp](https://app.warp.dev/get_warp)                              | Speedy, efficient terminal emulator.                    |
+| [Raycast](https://www.raycast.com/)                                | Command center for quick tool access and control.       |
+| [Rectangle](https://rectangleapp.com/)                             | Window management app with keyboard shortcuts.          |
+| [Altab](https://alt-tab-macos.netlify.app/)                        | Windows-style “Alt-Tab” window switcher for macOS.      |
+| [MonitorControl](https://github.com/MonitorControl/MonitorControl) | Control external monitor settings from macOS.           |
+| [Metting Bar](https://meetingbar.app/)                             | MeetingBar is a menu-bar app for your calendar meetings |
 
 ### Web App Stack
 
@@ -96,3 +96,25 @@
 | [zizmor](https://github.com/zizmorcore/zizmor)                                                 | Security audit for GitHub Actions workflows.                                |
 | [TruffleHog](https://github.com/trufflesecurity/trufflehog)                                    | Scans git history for leaked secrets.                                       |
 | [AGENTS.md](https://agents.md/)                                                                | One instructions file for every coding agent (Claude Code, Codex, Cursor).  |
+
+### Agent Skills
+
+Reusable [Agent Skills](https://docs.claude.com/en/docs/claude-code/skills) for Claude Code, Codex and Cursor, in [`skills/`](./skills). Each skill discovers project specifics (package manager, default branch, issue tracker, design tokens) at runtime instead of hardcoding them.
+
+Install one, or all of them, with the [skills CLI](https://github.com/vercel-labs/skills):
+
+```bash
+npx skills add alon710/configs --list              # see what's here
+npx skills add alon710/configs -s create-pr -g     # one skill, user-level
+npx skills add alon710/configs -s '*' -g           # everything
+```
+
+| Skill                                               | Description                                                                                                           |
+| --------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| [create-pr](./skills/create-pr)                     | Opens a PR titled with its issue id, with a user-impact-first body and a manual QA table Claude runs where it's safe. |
+| [resolve-pr-issues](./skills/resolve-pr-issues)     | Inventories every PR review thread and comment, verifies each, replies, and resolves.                                 |
+| [debug](./skills/debug)                             | Triages a concrete bug report from real logs, DB rows and deploy history to a root cause and a minimal fix.           |
+| [vercel-log-debug](./skills/vercel-log-debug)       | Pulls Vercel production error logs, ranks them, traces each to source, and writes a fix report.                       |
+| [codebase-audit](./skills/codebase-audit)           | Evidence-backed audit for dead code, duplication, over-abstraction and perf/cost wins; files tickets after approval.  |
+| [component-drilldown](./skills/component-drilldown) | Explains, fixes, or consolidates UI components: variants, usages, and repo conventions.                               |
+| [demo-video](./skills/demo-video)                   | Product demo videos as code: HTML recreating the real UI, a pure `seek(t)` on a beat grid, rendered to MP4.           |
