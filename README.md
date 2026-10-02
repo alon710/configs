@@ -109,18 +109,12 @@ npx skills add alon710/configs -s create-pr -g     # one skill, user-level
 npx skills add alon710/configs -s '*' -g           # everything
 ```
 
-| Skill                                                       | Description                                                                                                           |
-| ----------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| [create-pr](./skills/create-pr)                             | Opens a PR titled with its issue id, with a user-impact-first body and a manual QA table Claude runs where it's safe. |
-| [resolve-pr-issues](./skills/resolve-pr-issues)             | Inventories every PR review thread and comment, verifies each, replies, and resolves.                                 |
-| [pr-test-plan](./skills/pr-test-plan)                       | Dry-run-first, effect-labeled PR test plans; writes need per-step confirmation and a test database.                   |
-| [create-linear-ticket](./skills/create-linear-ticket)       | Files a Linear issue that is a real investigation: tested premise, `file:line` evidence, root cause, concrete fix.    |
-| [debug](./skills/debug)                                     | Triages a concrete bug report from real logs, DB rows and deploy history to a root cause and a minimal fix.           |
-| [vercel-log-debug](./skills/vercel-log-debug)               | Pulls Vercel production error logs, ranks them, traces each to source, and writes a fix report.                       |
-| [pipeline-state-debug](./skills/pipeline-state-debug)       | Explains gate by gate why a record did or didn't move through a job or state machine, with a mermaid diagram.         |
-| [codebase-audit](./skills/codebase-audit)                   | Evidence-backed audit for dead code, duplication, over-abstraction and perf/cost wins; files tickets after approval.  |
-| [component-drilldown](./skills/component-drilldown)         | Explains, fixes, or consolidates UI components: variants, usages, and repo conventions.                               |
-| [design-system-migration](./skills/design-system-migration) | Moves pages off a legacy hand-rolled pattern onto shared design-system primitives, with a migration ledger.           |
-| [form-fields-audit](./skills/form-fields-audit)             | Read-only audit of a dynamic-form schema for duplicate, dead, mistyped and unvalidated fields; HTML report.           |
-| [verified-data-entry](./skills/verified-data-entry)         | Researches facts from official sources and upserts them into the dev DB with a quoted source for every value.         |
-| [demo-video](./skills/demo-video)                           | Product demo videos as code: HTML recreating the real UI, a pure `seek(t)` on a beat grid, rendered to MP4.           |
+| Skill                                               | Description                                                                                                           |
+| --------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| [create-pr](./skills/create-pr)                     | Opens a PR titled with its issue id, with a user-impact-first body and a manual QA table Claude runs where it's safe. |
+| [resolve-pr-issues](./skills/resolve-pr-issues)     | Inventories every PR review thread and comment, verifies each, replies, and resolves.                                 |
+| [debug](./skills/debug)                             | Triages a concrete bug report from real logs, DB rows and deploy history to a root cause and a minimal fix.           |
+| [vercel-log-debug](./skills/vercel-log-debug)       | Pulls Vercel production error logs, ranks them, traces each to source, and writes a fix report.                       |
+| [codebase-audit](./skills/codebase-audit)           | Evidence-backed audit for dead code, duplication, over-abstraction and perf/cost wins; files tickets after approval.  |
+| [component-drilldown](./skills/component-drilldown) | Explains, fixes, or consolidates UI components: variants, usages, and repo conventions.                               |
+| [demo-video](./skills/demo-video)                   | Product demo videos as code: HTML recreating the real UI, a pure `seek(t)` on a beat grid, rendered to MP4.           |

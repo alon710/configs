@@ -44,7 +44,7 @@ Read these once, and use what they say everywhere below instead of assuming:
    Confirm the issue exists and matches the diff with the Linear MCP's `get_issue`. A branch reused for other work can carry a stale id.
 
    **No issue found? Always offer to create one before opening the PR.** Don't skip the question, and don't file on your own. Ask once, and include a draft title so the user only has to say yes:
-   - **Yes:** file it with the `create-linear-ticket` skill (the diff you just read counts as the investigation), then use the new id. If the Linear MCP is signed in to a workspace with no team matching this repo, stop and say so. Don't file it somewhere else.
+   - **Yes:** file it with the Linear MCP's `save_issue` (the diff you just read counts as the investigation, so the body can cite `file:line` evidence), then use the new id. If the Linear MCP is signed in to a workspace with no team matching this repo, stop and say so. Don't file it somewhere else.
    - **No:** open the PR without an id, and say in the final report that the tracker won't follow it.
 
 3. **Classify every change from the diff.** Read the changed files, not just the stat.
