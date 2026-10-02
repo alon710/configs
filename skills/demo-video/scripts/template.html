@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Demo film</title>
+<link rel="stylesheet" href="fonts/fonts.css">
+<style>
+/* ───── design tokens: REPLACE every value from the product's design system ─────
+   Read them from the product repo (CSS custom properties in its global stylesheet, the Tailwind theme,
+   a design doc) or from the running app with getComputedStyle(document.documentElement). Use the theme
+   the product ships by default. The film has no Tailwind: write literal colours (hex, rgb, oklch).
+   These placeholders are deliberately generic; a film must never ship with them.
+   The font family is --font, defined in fonts/fonts.css (written by new-film.sh). */
+:root{
+  --bg:#FAFAFA;            /* section background behind the card */
+  --card:#FFFFFF;
+  --fg:#18181B;            /* foreground text */
+  --muted:#F4F4F5;         /* muted surface: picker tracks, chips */
+  --muted-fg:#71717A;      /* secondary text */
+  --border:#E4E4E7;
+  --primary:#4F46E5;
+  --primary-fg:#FFFFFF;
+  --accent-bg:#EEF2FF;     /* feature-icon tile */
+  --accent:#4F46E5;        /* feature-icon glyph */
+  --radius-card:16px;
+  --radius-control:10px;
+  --shadow-card:0 1px 2px rgb(0 0 0/.04),0 8px 24px -12px rgb(0 0 0/.12);
+  --pointer:rgb(142 142 147/.5);
+}
+/* ───── end of tokens ───── */
+html,body{margin:0;background:var(--bg);overflow:hidden}
+#stage{position:relative;width:1920px;height:1080px;overflow:hidden;font-family:var(--font,system-ui,sans-serif);color:var(--fg);background:var(--bg);-webkit-font-smoothing:antialiased}
+.abs{position:absolute}.t{white-space:nowrap;line-height:1.25}
+.num{direction:ltr;unicode-bidi:isolate;display:inline-block}.d{display:inline-block;width:.52em;text-align:center}
+.ic{display:block;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+#world{position:absolute;left:0;top:0;transform-origin:0 0}
+.card{position:absolute;left:0;top:0;background:var(--card);border:1px solid var(--border);border-radius:var(--radius-card);box-shadow:var(--shadow-card);z-index:1}
+.sc{position:absolute;left:0;top:0;transform-origin:50% 50%;display:none;z-index:2}
+.hl{position:absolute;left:0;right:0;text-align:center;white-space:nowrap}
+#hlText{top:128px;font-size:92px;font-weight:800;letter-spacing:-.01em;line-height:1.1}
+#eyebrow{top:48px;display:flex;justify-content:center}
+#eyebrow span{background:var(--primary);color:var(--primary-fg);border-radius:999px;padding:8px 28px;font-size:30px;font-weight:600;line-height:1.3}
+#ptr{position:absolute;left:0;top:0;border-radius:50%;background:var(--pointer)}
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute"><defs>
+  <!-- the product's icon set only; print symbols with: node <skill-dir>/scripts/icons.mjs <name> ... -->
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol>
+  <symbol id="i-arrow-right" viewBox="0 0 24 24"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></symbol>
+</defs></svg>
+<!-- right-to-left product: dir="rtl" here and lang on <html>; see REFERENCE.md → Right-to-left -->
+<div id="stage" dir="ltr">
+  <!-- the glow drifts up to 36/22 px, so it overhangs the stage by more than that: no edge ever shows -->
+  <div class="abs" id="glow" style="inset:-64px;background:radial-gradient(60% 60% at 72% 0%, color-mix(in srgb,var(--primary) 7%,transparent), transparent 70%)"></div>
+  <div id="eyebrow" class="hl"><span></span></div>
+  <div id="hlText" class="hl"></div>
+  <div id="world">
+    <div class="card" id="card"></div>
+    <div id="ripple" style="position:absolute;left:0;top:0;border-radius:50%;background:color-mix(in srgb,var(--primary) 14%,transparent);box-shadow:inset 0 0 0 1.5px color-mix(in srgb,var(--primary) 45%,transparent),0 0 0 2px rgb(255 255 255/.7);display:none;z-index:3"></div>
+    <!-- PLACEHOLDER COPY: replace every string with the product's real one, copied from its i18n files or source -->
+    <div class="sc" id="scCount" style="width:460px;height:240px">
+      <div class="abs" style="left:24px;top:24px;width:40px;height:40px;border-radius:12px;background:var(--accent-bg);color:var(--accent);display:flex;align-items:center;justify-content:center"><svg class="ic" width="20" height="20"><use href="#i-search"/></svg></div>
+      <div class="abs t" style="left:76px;top:22px;font-size:18px;font-weight:700">Feature name</div>
+      <div class="abs t" style="left:76px;top:47px;font-size:13.5px;font-weight:500;color:var(--muted-fg)">Searching <span class="num" id="claim"></span> records for you</div>
+      <div class="abs t" style="left:0;right:0;top:100px;text-align:center;font-size:58px;font-weight:800;color:var(--primary);line-height:1"><span class="num" id="num"></span></div>
+    </div>
+    <div class="sc" id="scPick" style="width:460px;height:150px">
+      <div class="abs t" style="left:22px;top:22px;font-size:18px;font-weight:700">Item name</div>
+      <div class="abs t" style="left:22px;top:48px;font-size:13.5px;font-weight:500;color:var(--muted-fg)">Do you want this one?</div>
+      <div class="abs" style="left:22px;right:22px;top:92px;height:32px;border-radius:var(--radius-control);background:var(--muted)">
+        <div class="abs" id="ind" style="top:3px;bottom:3px;width:205px;border-radius:calc(var(--radius-control) - 2px);background:var(--card);box-shadow:0 1px 2px rgb(0 0 0/.05)"></div>
+        <div class="abs t" id="yes" style="left:3px;width:205px;height:32px;display:flex;align-items:center;justify-content:center;gap:4px;font-size:14px;font-weight:500"><svg class="ic" id="yesChk" width="13" height="13" style="color:var(--primary);opacity:0"><use href="#i-check"/></svg>Yes, please</div>
+        <div class="abs t" style="right:3px;width:205px;line-height:32px;text-align:center;font-size:14px;font-weight:500;color:color-mix(in srgb,var(--fg) 60%,transparent)">No, thanks</div>
+      </div>
+    </div>
+    <div class="sc" id="scCta" style="width:460px;height:200px">
+      <img src="assets/logo.svg" alt="" class="abs" style="left:110px;top:30px;width:240px;height:auto">
+      <div class="abs" style="left:0;right:0;top:118px;display:flex;justify-content:center">
+        <div id="btn" style="height:44px;border-radius:var(--radius-control);background:var(--primary);color:var(--primary-fg);display:inline-flex;align-items:center;gap:10px;padding:0 22px">
+          <span class="t" style="font-size:16px;font-weight:600;line-height:44px">Get started free</span><svg class="ic" width="18" height="18"><use href="#i-arrow-right"/></svg>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div id="ptr"></div>
+</div>
+<script>
+'use strict';
+// ───── engine: every value is a pure function of t ─────
+// BAR = music.json "bar" (render.mjs warns on drift). bar(n) counts bars of the edit, not of the song.
+const TAU = Math.PI * 2, BAR = 2, BPB = 4, BEAT = BAR / BPB, INTRO = 0;     // BPB = beats.py --beats-per-bar; INTRO = whole bars
+window.FILM = { width: 1920, height: 1080, fps: 60, seconds: 16, bar: BAR };   // seconds = music.json "length"
+Object.assign(document.getElementById('stage').style, { width: FILM.width + 'px', height: FILM.height + 'px' });
+const bar = (n, beat = 0) => INTRO + (n - 1) * BAR + beat * BEAT;            // edit bar n (1-based) + beats
+const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x)), lerp = (a, b, k) => a + (b - a) * k;
+const SPR = { morph: [0.6, 0.9], press: [0.28, 0.75], click: [0.16, 0.8], snap: [0.35, 0.9], fade: [0.4, 1], cam: [0.9, 1], slow: [0.8, 1] };
+function step(t, [resp, z]) {                                                // closed-form spring step response
+  if (t <= 0) return 0;
+  const w = TAU / resp;
+  if (z < 1) { const wd = w * Math.sqrt(1 - z * z), e = Math.exp(-z * w * t); return 1 - e * (Math.cos(wd * t) + (z * w / wd) * Math.sin(wd * t)); }
+  return 1 - Math.exp(-w * t) * (1 + w * t);
+}
+function trk(v0, events, spr = SPR.morph) {                                  // one spring per retarget, summed
+  const ev = events.map(e => [e[0], e[1], e[2] || spr]).sort((a, b) => a[0] - b[0]);
+  return t => { let v = v0, prev = v0; for (const [te, val, s] of ev) { if (t > te) v += (val - prev) * step(t - te, s); prev = val; } return v; };
+}
+function follow(fn, t, spr, win = 1.6, rate = 240) {                         // spring following a moving target
+  const n = Math.ceil(win * rate), dt = 1 / rate, t0 = t - n * dt;
+  let prev = fn(t0), v = prev;
+  for (let i = 1; i <= n; i++) { const cur = fn(t0 + i * dt); if (cur !== prev) v += (cur - prev) * step(t - (t0 + i * dt), spr); prev = cur; }
+  return v;
+}
+function swap(t, tin, tout = 1e9) {                                          // exit 120 ms blur; enter on its own spring
+  if (t < tin || t > tout + 0.12) return null;
+  const p = step(t - tin, SPR.fade), s = step(t - tin, SPR.morph);
+  let o = p, blur = 6 * (1 - p), sc = 0.96 + 0.04 * s;
+  if (t > tout) { const e = clamp((t - tout) / 0.12); o *= 1 - e; blur = Math.max(blur, 6 * e); sc *= 1 - 0.04 * e; }
+  return { o, blur, sc };
+}
+// tabular digits for fonts without `tnum`; tune .d's width to the font's widest digit.
+// If the product font has tnum, use font-variant-numeric:tabular-nums and make this a passthrough.
+const tab = s => String(s).replace(/\d/g, d => `<span class="d">${d}</span>`);
+const $ = id => document.getElementById(id);
+function setHTML(el, h) { if (el._h !== h) { el.innerHTML = h; el._h = h; } }
+let Z = 2.5;
+const CAM = { x: FILM.width / 2, y: 672 };                                    // screen point the world origin maps to
+function put(el, x, y, w, h, st) {                                           // place a scene in world px, centred on (x, y)
+  if (!st || st.o < 0.002) { el.style.display = 'none'; return; }
+  el.style.display = 'block'; el.style.opacity = st.o.toFixed(4);
+  el.style.filter = st.blur > 0.05 ? `blur(${(st.blur / Z).toFixed(3)}px)` : 'none';
+  el.style.transform = `translate(${(x - w / 2).toFixed(3)}px,${(y - h / 2).toFixed(3)}px) scale(${st.sc.toFixed(4)})`;
+}
+
+// ───── choreography (edit this) ─────
+// Every number on screen is a product claim: set it from a read-only query against real data before
+// rendering, and round down. Never copy a number from the marketing site.
+const CLAIMS = { records: 1000 };                     // e.g. select count(*) from <table> where <live>
+const S = { count: 0, pick: bar(4), cta: bar(7) };
+const HEADS = [[S.count, '', 'Find what fits'], [S.pick, 'Step 1 of 3', 'You choose'], [S.cta, '', 'Start with <span style="color:var(--primary)">Product</span> today']];
+const CK = [[S.pick, 460, 150], [S.cta, 460, 200]];                          // the one card morphs: [t, w, h]
+const Cw = trk(460, CK.map(k => [k[0], k[1]])), Ch = trk(240, CK.map(k => [k[0], k[2]]));
+const Zk = trk(2.6, [[S.pick, 2.7], [S.cta, 2.6]], SPR.cam);
+const TAP = bar(5), CLICK = bar(8);
+const PK = [[bar(4, 1), -103, 33, SPR.slow], [bar(6), 150, 160, SPR.slow], [bar(7, 2), 0, 40, [0.55, 1]]];   // "Yes, please" is the left half (x < 0); mirror x for RTL
+const Px = trk(300, PK.map(k => [k[0], k[1], k[3]])), Py = trk(250, PK.map(k => [k[0], k[2], k[3]]));
+const Pvis = trk(0, [[bar(4, 1), 1], [bar(6, 1), 0], [bar(7, 2), 1]], SPR.fade);
+const Ppress = trk(0, [[TAP, 1], [TAP + 0.14, 0], [CLICK, 1, SPR.click], [CLICK + 0.08, 0, SPR.click]], SPR.press);
+window.SOUND_EVENTS = [{ t: bar(3), kind: 'tick' }, { t: TAP, kind: 'tap' }, { t: CLICK, kind: 'tap' }];
+window.STILL_TIMES = Array.from({ length: Math.floor(FILM.seconds / BAR) }, (_, i) => i * BAR + 0.75 * BAR);   // one per bar
+
+function seek(t) {
+  t = clamp(t, 0, FILM.seconds);
+  // ambient drift: no two frames are ever identical, so holds never read as a stuck video
+  $('glow').style.transform = `translate(${(36 * Math.sin(TAU * t / 23)).toFixed(2)}px,${(22 * Math.cos(TAU * t / 29)).toFixed(2)}px)`;
+  Z = Zk(t);
+  $('world').style.transform = `translate(${CAM.x}px,${CAM.y}px) scale(${Z.toFixed(5)})`;
+  let cur = 0; HEADS.forEach((h, i) => { if (t >= h[0]) cur = i; });
+  const st = swap(t, HEADS[cur][0], HEADS[cur + 1] ? HEADS[cur + 1][0] - 0.18 : 1e9);
+  setHTML($('hlText'), HEADS[cur][2]); $('eyebrow').firstElementChild.textContent = HEADS[cur][1];
+  for (const el of [$('hlText'), $('eyebrow')]) {
+    el.style.opacity = st ? st.o.toFixed(3) : '0';
+    el.style.filter = st && st.blur > .05 ? `blur(${st.blur.toFixed(2)}px)` : 'none';
+  }
+  $('eyebrow').style.display = HEADS[cur][1] ? 'flex' : 'none';
+  const cw = Cw(t), ch = Ch(t), card = $('card');
+  card.style.width = cw + 'px'; card.style.height = ch + 'px';
+  card.style.transform = `translate(${-cw / 2}px,${-ch / 2}px)`;
+
+  put($('scCount'), 0, 0, 460, 240, swap(t, S.count + 0.18, S.pick - 0.18));
+  const k = clamp((t - 0.6) / (bar(3) - 0.6)), eased = 1 - Math.pow(1 - k, 3), total = CLAIMS.records;
+  const claim = total.toLocaleString('en-US') + '+';
+  setHTML($('claim'), claim);
+  setHTML($('num'), tab(k < 0.02 ? claim : Math.max(23, Math.round(total - (total - 23) * eased)).toLocaleString('en-US')));
+
+  put($('scPick'), 0, 0, 460, 150, swap(t, S.pick + 0.18, S.cta - 0.18));
+  const sel = step(t - TAP, SPR.snap);
+  $('ind').style.left = (3 + (1 - clamp(sel)) * 20).toFixed(2) + 'px'; $('ind').style.opacity = clamp(sel * 3).toFixed(3);
+  $('yes').style.color = `color-mix(in srgb,var(--fg) ${lerp(60, 100, clamp(sel)).toFixed(1)}%,transparent)`;
+  const chk = step(t - TAP - 0.05, SPR.snap);          // the real component's ✓ on the chosen option
+  $('yesChk').style.opacity = clamp(chk * 1.5).toFixed(3); $('yesChk').style.transform = `scale(${(0.4 + 0.6 * clamp(chk)).toFixed(3)})`;
+
+  put($('scCta'), 0, 0, 460, 200, swap(t, S.cta + 0.18));
+  $('btn').style.transform = `scale(${(1 - 0.035 * clamp(Ppress(t) * (t > bar(7) ? 1 : 0))).toFixed(4)})`;
+
+  // a ripple where the pointer clicks: clicks must read without any hover state
+  const rp = $('ripple'), ct = [TAP, CLICK].filter(c => t >= c && t < c + 0.55).pop();
+  if (ct !== undefined) {
+    const a = (t - ct) / 0.55, rad = 6 + 30 * (1 - Math.pow(1 - a, 3));
+    Object.assign(rp.style, { display: 'block', width: 2 * rad + 'px', height: 2 * rad + 'px', opacity: (1 - a).toFixed(3),
+      transform: `translate(${(Px(ct) - rad).toFixed(2)}px,${(Py(ct) - rad).toFixed(2)}px)` });
+  } else rp.style.display = 'none';
+
+  const vis = clamp(Pvis(t)), p = $('ptr');
+  if (vis < 0.003) { p.style.display = 'none'; return; }
+  const w = 26 * (1 - 0.18 * clamp(Ppress(t))), sx = CAM.x + Px(t) * Z, sy = CAM.y + Py(t) * Z;
+  Object.assign(p.style, { display: 'block', opacity: vis.toFixed(3), width: w + 'px', height: w + 'px',
+    transform: `translate(${(sx - w / 2).toFixed(2)}px,${(sy - w / 2).toFixed(2)}px)` });
+}
+window.seek = seek;
+window.ready = (async () => {
+  // load every declared face up front (unicode-range would otherwise defer some), and fail loudly:
+  // a frame rendered in a fallback font is a wrong frame
+  const failed = (await Promise.all([...document.fonts].map(f => f.load().then(() => null, () => `${f.family} ${f.weight}`)))).filter(Boolean);
+  if (failed.length) throw new Error('fonts failed to load: ' + failed.join(', '));
+  await document.fonts.ready;
+  await Promise.all([...document.images].map(im => im.complete ? 0 : new Promise(r => { im.onload = im.onerror = r; })));
+  seek(parseFloat(new URLSearchParams(location.search).get('t') || '0'));
+  return true;
+})();
+</script>
+</body>
+</html>
