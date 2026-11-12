@@ -68,3 +68,14 @@ grep -hoE '^[A-Z0-9_]+="?(sk|pk|rk)_(live|test)' .env* 2>/dev/null   # live vs t
    - Run the framework's local binary with its port flag, for example `./node_modules/.bin/next dev --port $port` or `./node_modules/.bin/vite --port $port`, run in the background. For a long-running server, prefer the local binary over `bunx` / `npx`. A package-runner wrapper has been seen exiting 0 right after its first request.
 4. **One server per directory.** Some frameworks refuse a second dev server in the same directory. Next.js, for example, prints `Another next dev server is already running`. When that happens, reuse the URL it prints, which may be on another port.
 5. **Wait for it to be ready**, then `curl` any route once and confirm the server is still listening before you open the browser.
+
+## Linear repos
+
+Use this instead of the GitHub Issues flow when the repo tracks work in Linear: recent PR titles end in ids like `(ENG-123)`, or `AGENTS.md` says so.
+
+- **Why the id matters:** Linear's GitHub integration links the PR by the issue id in its title or branch name, and moves the issue with it: open PR → In Progress / In Review, merged → Done. The exact mapping is in the team's Git automation settings. A PR without an id is invisible to Linear, so its issue sits in Todo until someone moves it by hand.
+- **Issue prefix:** the Linear team key (`list_teams`), or the ids in recent titles.
+- **Find the issue:** the branch name first (Linear-generated branches look like `<user>/<prefix>-<n>-<slug>`), then `git log origin/<default>..HEAD | grep -oiE '<PREFIX>-[0-9]+'`, then the conversation. Confirm it with the Linear MCP's `get_issue`.
+- **No issue:** offer to file one with the Linear MCP's `save_issue`, with the same ask-once rule as step 2. If the Linear MCP is signed in to a workspace with no team matching this repo, stop and say so. Don't file the issue somewhere else.
+- **Title:** the id goes at the end in parentheses, as in `feat(billing): retry a failed renewal once (ENG-241)`. Separate several ids with commas: `(ENG-86, ENG-74)`. Leave `Closes #<n>` out of the body template.
+- **Partial work:** leave the id out of the title and write `Part of <PREFIX>-<n>` in the body. A `<prefix>-<n>-…` branch name still links the PR and moves the issue, so point that out if it matters.

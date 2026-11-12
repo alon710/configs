@@ -111,7 +111,7 @@ npx skills add alon710/configs -s '*' -g           # everything
 
 | Skill                                               | Description                                                                                                                                 |
 | --------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| [create-pr](./skills/create-pr)                     | Opens a PR titled with its issue id, with a user-impact-first body and a manual QA table Claude runs where it's safe.                       |
+| [create-pr](./skills/create-pr)                     | Opens a PR that closes its GitHub issue, filing one first if needed, with a user-impact-first body and a QA table Claude runs.              |
 | [resolve-pr-issues](./skills/resolve-pr-issues)     | Inventories every PR review thread and comment, verifies each, replies, and resolves.                                                       |
 | [debug](./skills/debug)                             | Triages a concrete bug report from real logs, DB rows and deploy history to a root cause and a minimal fix.                                 |
 | [vercel-log-debug](./skills/vercel-log-debug)       | Pulls Vercel production error logs, ranks them, traces each to source, and writes a fix report.                                             |

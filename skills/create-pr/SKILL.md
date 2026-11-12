@@ -1,13 +1,15 @@
 ---
 name: create-pr
-description: Open a GitHub pull request titled with its issue-tracker id (such as a Linear `ENG-123`), so the tracker moves the issue with the PR. The description leads with user impact - a three-bullet TL;DR, numbered user-facing changes, developer-facing notes, tests, and a manual QA table with one row per user-facing change. Before opening it, Claude checks what the local dev server is connected to, then runs every QA row that is safe there in the user's Chrome and marks those rows 🤖. The rest stay ⬜ for the user to flip to ✅. Adds a release-notes or changelog entry when the repo has one and the PR changes anything users can see. Use when asked to create, open, or raise a PR, "make a PR for this branch", or "ship this as a PR".
+description: Open a GitHub pull request linked to its GitHub issue (`Closes #<n>` in the body), so GitHub links the two and closes the issue when the PR merges. If no issue exists, Claude offers to file one with `gh issue create` first. The description leads with user impact - a three-bullet TL;DR, numbered user-facing changes, developer-facing notes, tests, and a manual QA table with one row per user-facing change. Before opening it, Claude checks what the local dev server is connected to, then runs every QA row that is safe there in the user's Chrome and marks those rows 🤖. The rest stay ⬜ for the user to flip to ✅. Adds a release-notes or changelog entry when the repo has one and the PR changes anything users can see. Use when asked to create, open, or raise a PR, "make a PR for this branch", or "ship this as a PR".
 ---
 
 # Create a PR
 
 The description is written for a reviewer who tests by using the app. Lead with what the end user notices. Implementation detail goes last and stays short.
 
-When the repo tracks work in Linear, every PR is tied to an issue. The issue id in the title (`<PREFIX>-<n>`) is what lets Linear's GitHub integration link the PR and move the issue: open PR → In Progress / In Review, merged → Done (the exact mapping is in the team's Git automation settings). A PR without an id is invisible to Linear, so its ticket sits in Todo until someone moves it by hand. If the repo uses GitHub Issues instead, put `Closes #<n>` in the body.
+Every PR is tied to a GitHub issue. A closing keyword in the PR body (`Closes #<n>`) is what links the two: the issue shows the PR under **Development**, and merging into the default branch closes the issue. A PR without one leaves its issue open until someone closes it by hand. The keyword only works in the PR body or a commit message, not in the title, and only for a PR that targets the default branch.
+
+If the repo tracks work in Linear instead (see [Discover the project first](#discover-the-project-first)), follow [REFERENCE.md → Linear repos](REFERENCE.md#linear-repos) wherever this file says "issue".
 
 ## Discover the project first
 
@@ -17,8 +19,9 @@ Read these once, and use what they say everywhere below instead of assuming:
 - **Default branch** (`<default>` below): `gh repo view --json defaultBranchRef -q .defaultBranchRef.name`.
 - **Package manager** from the lockfile: `bun.lock`/`bun.lockb` → bun, `pnpm-lock.yaml` → pnpm, `yarn.lock` → yarn, `package-lock.json` → npm. Scripts come from `package.json`, or from the Makefile / justfile in other stacks.
 - **CI gates**: `.github/workflows/*.yml` shows which scripts CI runs, and on which paths.
-- **Title convention**: `git log --oneline -20 origin/<default>`. Check for Conventional Commits and an issue-id suffix.
-- **Issue prefix**: the Linear team key (`list_teams`), or the ids in recent titles.
+- **Title convention**: `git log --oneline -20 origin/<default>`. Check for Conventional Commits.
+- **Issue tracker**: GitHub Issues, unless the repo shows it uses Linear: recent PR titles end in ids like `(ENG-123)`, or `AGENTS.md` says so. Check that issues are on with `gh repo view --json hasIssuesEnabled -q .hasIssuesEnabled`. If they're off, say so and open the PR without an issue.
+- **Labels**: `gh label list`. When you file an issue, use only labels that already exist. Never create one.
 - **Scratch directory** (`<scratch>` below): if `git check-ignore -q .context/pr/probe.md` succeeds, use `.context/pr/`, otherwise `mktemp -d`. Never use a fixed `/tmp` path, because it collides across worktrees and sessions. Name files `<branch-slug>`, which is the branch name with `/` replaced by `-`.
 
 ## Workflow
@@ -36,16 +39,17 @@ Read these once, and use what they say everywhere below instead of assuming:
    - If `origin/<default>` already contains the same fix, re-scope honestly or stop and say so. Parallel worktrees and agents often pick up sibling tickets.
 
 2. **Find the issue.** Check these in order and stop at the first hit:
-   - the branch name: Linear-generated branches look like `<user>/<prefix>-<n>-<slug>`
-   - the commit messages: `git log origin/<default>..HEAD | grep -oiE '<PREFIX>-[0-9]+'`
-   - an issue your tooling linked to this worktree, if any
-   - the conversation: the user may have named the ticket
+   - the conversation: the user may have named the issue or pasted its URL
+   - the branch name: GitHub's **Create a branch** button on an issue makes `<n>-<slug>`, and people often use `<user>/<n>-<slug>`
+   - the commit messages: `git log origin/<default>..HEAD | grep -oE '#[0-9]+'`
+   - a branch GitHub linked to an issue: `gh issue develop --list <n>` shows them, for an issue you suspect
+   - open issues that match the diff: `gh issue list --state open --search "<two or three keywords from the diff>"`. Only a clear match counts. Confirm a fuzzy one with the user.
 
-   Confirm the issue exists and matches the diff with the Linear MCP's `get_issue`. A branch reused for other work can carry a stale id.
+   Confirm the issue with `gh issue view <n> --json number,title,state,body`. It must be open and match the diff. A branch reused for other work can carry a stale number, and `#<n>` can also be a PR number, which `gh issue view` rejects.
 
    **No issue found? Always offer to create one before opening the PR.** Don't skip the question, and don't file on your own. Ask once, and include a draft title so the user only has to say yes:
-   - **Yes:** file it with the Linear MCP's `save_issue` (the diff you just read counts as the investigation, so the body can cite `file:line` evidence), then use the new id. If the Linear MCP is signed in to a workspace with no team matching this repo, stop and say so. Don't file it somewhere else.
-   - **No:** open the PR without an id, and say in the final report that the tracker won't follow it.
+   - **Yes:** write the body to `<scratch>/<branch-slug>-issue.md` and file it with `gh issue create --title "<title>" --body-file <file>`. Add `--label` only for labels from `gh label list` that clearly fit. The diff you just read counts as the investigation, so the body states the problem the user sees, the cause with `file:line` evidence, and the fix. Use the number from the URL it prints.
+   - **No:** open the PR without an issue, and say in the final report that nothing tracks it.
 
 3. **Classify every change from the diff.** Read the changed files, not just the stat.
    - **User-facing**: anything an end user, admin, or email recipient can see or feel. That covers UI, copy, routes, emails, permissions, performance they would notice, and data they see.
@@ -66,17 +70,19 @@ Read these once, and use what they say everywhere below instead of assuming:
 
 7. **Run the QA table yourself in the user's browser**, following [Browser QA](#browser-qa) below. Mark each row you ran and saw pass 🤖. Leave every other row ⬜, with the reason in the row. Don't open the PR while a row you ran is failing. Fix it if it's in scope, or stop and tell the user.
 
-8. **Create the PR.** Push only if the branch isn't on the remote yet. Match the repo's title convention. With Conventional Commits, that looks like `feat(billing): retry a failed renewal once (ENG-241)`: the issue id goes at the end in parentheses, and several ids are separated by commas, as in `(ENG-86, ENG-74)`. If the repo squash-merges, the title becomes the commit on `<default>`, so the id also stays in the git history.
+8. **Create the PR.** Push only if the branch isn't on the remote yet. Match the repo's title convention, such as `feat(billing): retry a failed renewal once` with Conventional Commits. Leave the issue number out of the title. It doesn't link anything there, and a squash merge appends the PR number as `(#<pr>)`, so the commit would carry two confusable numbers.
    ```bash
    git push -u origin HEAD
    gh pr view --json number,url 2>/dev/null   # a push hook may have opened one already
-   gh pr create --base <default> --title "<type(scope): summary (<PREFIX>-<n>)>" --body-file <scratch>/<branch-slug>.md
+   gh pr create --base <default> --title "<type(scope): summary>" --body-file <scratch>/<branch-slug>.md
    ```
-   If a hook opened a PR on push, fix that PR with `gh pr edit` instead of creating a second one.
+   If a hook opened a PR on push, fix that PR with `gh pr edit` instead of creating a second one. Afterwards, confirm the link took: `gh pr view --json closingIssuesReferences -q '.closingIssuesReferences[].number'` lists the issue.
 
-   **Partial work** (the ticket should stay open after this merges): leave the id out of the title and write `Part of <PREFIX>-<n>` in the body. A non-closing phrase like this links the PR without moving the issue to Done. The branch name links the PR too, so a `<prefix>-<n>-…` branch will still move the issue. Point that out to the user if it matters.
+   **Several issues:** every issue needs its own keyword, as in `Closes #12, closes #15`. A bare `Closes #12, #15` closes only #12. An issue in another repo is `Closes <owner>/<repo>#<n>`.
 
-9. **Updating an existing PR:** read the body with `gh pr view <n> --json title,body` and replace only the human-authored part. Keep auto-generated blocks (bot summaries in `<!-- … -->` markers) intact. Keep every ✅ and 🤖 on a QA row that still applies. Reset a row to ⬜ only if its behavior changed since it was marked, then rerun step 7 for new and reset rows. Then run `gh pr edit <n> --body-file <file>`. If the title has no issue id, run step 2 and add the id with `gh pr edit <n> --title "…"`. If the user-facing changes have changed, rerun step 4 so the release-notes entry still matches the diff.
+   **Partial work** (the issue should stay open after this merges): write `Part of #<n>` instead of `Closes #<n>`. A non-closing mention puts the PR on the issue's timeline without closing it. Point that out to the user if it matters.
+
+9. **Updating an existing PR:** read the body with `gh pr view <n> --json title,body` and replace only the human-authored part. Keep auto-generated blocks (bot summaries in `<!-- … -->` markers) intact. Keep every ✅ and 🤖 on a QA row that still applies. Reset a row to ⬜ only if its behavior changed since it was marked, then rerun step 7 for new and reset rows. Then run `gh pr edit <n> --body-file <file>`. If the body has no closing keyword, run step 2 and add `Closes #<n>` under the TL;DR. If the user-facing changes have changed, rerun step 4 so the release-notes entry still matches the diff.
 
 10. **Report:**
     - the PR URL
@@ -95,6 +101,8 @@ Read these once, and use what they say everywhere below instead of assuming:
 - **What:** <one sentence on the outcome for users, or "Developer-facing only: …">
 - **Risk:** <the one behavior most likely to break, or "Low — …" with the reason>
 - **Before merge:** <migration to apply / env var / flag, or "Nothing">
+
+Closes #<n>
 
 ## User-facing changes
 ### 1. <change> — <what the end user notices (behavior, not files)>
@@ -175,7 +183,7 @@ Never log in, log out, or change the user's email or password yourself.
 
 ## Rules
 
-- **The issue id goes in the title**, as `(<PREFIX>-<n>)` at the end. Mentioning it only in the body doesn't trigger Linear's status automation unless you use a magic word. If there is no issue, offer to create one first (step 2).
+- **`Closes #<n>` goes in the body**, on its own line right after the TL;DR. A bare `#<n>` or a number in the title only mentions the issue: it won't link the PR under **Development** or close the issue on merge. If there is no issue, offer to create one first (step 2).
 - **A user-facing PR ships a release-notes entry** when the repo has a mechanism for one (step 4). Notes names the entry, or explains why there isn't one.
 - **The TL;DR is the first section and has exactly the three bullets.** A reviewer should be able to decide how carefully to review from the TL;DR by itself. No file paths, and no detail that belongs in the sections below.
 - **Lead with user impact, not implementation.** No file paths in "User-facing changes".
