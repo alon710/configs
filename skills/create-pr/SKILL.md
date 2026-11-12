@@ -1,6 +1,6 @@
 ---
 name: create-pr
-description: Open a GitHub pull request titled with its issue-tracker id (such as a Linear `ENG-123`), so the tracker moves the issue with the PR. The description leads with user impact - a three-bullet TL;DR, numbered user-facing changes, developer-facing notes, tests, and a manual QA table with one row per user-facing change. Before opening it, Claude checks what the local dev server is connected to, then runs every QA row that is safe there in the user's Chrome and marks those rows 🤖. The rest stay ⬜ for the user to flip to ✅. Adds a release-notes or changelog entry when the repo has one and the PR changes anything users can see. Use when asked to create, open, or raise a PR, "make a PR for this branch", or "ship this as a PR".
+description: Open a GitHub pull request titled with its issue-tracker id (such as a Linear `ENG-123`), so the tracker moves the issue with the PR. The description leads with user impact - a three-bullet TL;DR, numbered user-facing changes, developer-facing notes, tests, and a manual QA table with one row per user-facing change. Before opening it, Claude checks what the local dev server is connected to, then runs every QA row that is safe there in the user's Chrome and marks those rows 🤖. The rest stay ⬜ for the user to flip to ✅. Adds a release-notes or changelog entry when the repo has one and the PR changes anything users can see. It ends every run by having a fresh `claude` session review the PR with `/code-review`, then runs `/resolve-pr-issues` to fix, answer and resolve every review comment, and reports both. Use when asked to create, open, or raise a PR, "make a PR for this branch", or "ship this as a PR".
 ---
 
 # Create a PR
@@ -78,7 +78,25 @@ Read these once, and use what they say everywhere below instead of assuming:
 
 9. **Updating an existing PR:** read the body with `gh pr view <n> --json title,body` and replace only the human-authored part. Keep auto-generated blocks (bot summaries in `<!-- … -->` markers) intact. Keep every ✅ and 🤖 on a QA row that still applies. Reset a row to ⬜ only if its behavior changed since it was marked, then rerun step 7 for new and reset rows. Then run `gh pr edit <n> --body-file <file>`. If the title has no issue id, run step 2 and add the id with `gh pr edit <n> --title "…"`. If the user-facing changes have changed, rerun step 4 so the release-notes entry still matches the diff.
 
-10. **Report:**
+10. **Run `/code-review` on the PR from a fresh session, every time this skill runs, updates (step 9) included.** This session wrote the code and the PR body, so it reads them with the author's blind spots. A fresh `claude` process starts without that context and reviews the PR the way a stranger would. Run it in the background from a checkout of the PR's branch, and keep working until it exits:
+    ```bash
+    claude -p "/code-review <PR#> --comment" --permission-mode bypassPermissions \
+      > <scratch>/<branch-slug>.review.md 2>&1
+    ```
+    - Pass the PR number, not the branch, so the review targets what's on GitHub.
+    - `--comment` posts each finding as an inline PR comment. Use it only on PRs the user owns, and drop it when they asked for findings in chat only. Use `--fix` only if the user asked for it.
+    - Never run `/code-review` in this session or in a `fork` agent: both inherit this context, which defeats the point.
+    - Wait for the process to exit, then read the saved output. Don't fold its findings silently into your own judgment: a finding you reject is reported as rejected, with the reason.
+
+11. **Run `/resolve-pr-issues <PR#>` as soon as the review exits, every time, updates included.** Run it in this session through the Skill tool. The review needed a fresh session to judge the code. Acting on its findings against the current branch is where this session's context helps.
+    - It covers every feedback surface, not only the review's inline comments: other bots' threads, review summaries, and top-level comments.
+    - For each item it checks the finding against the current head, then fixes it, declines it with the repository fact behind the decision, or marks it already addressed. It replies on every thread before resolving it, and posts one ledger comment for the items that have no resolve control.
+    - A create-PR run counts as the request to commit and push its fixes. Commit them deliberately (a hook may also auto-commit), rerun the step 5 checks they touch, and push.
+    - If code changed, redo step 9's body edit so the body stays accurate, and rerun step 7 for each QA row reset to ⬜. That edit doesn't start another review.
+    - Finish with the skill's `verify` command showing no unresolved review thread.
+    - Don't start another `/code-review` round unless the user asks. One review and one resolve pass per run keeps the loop finite.
+
+12. **Report:**
     - the PR URL
     - the linked issue, or that there isn't one and why
     - the release-notes entry and its text, or why there's none
@@ -86,6 +104,8 @@ Read these once, and use what they say everywhere below instead of assuming:
     - the QA split: how many rows are 🤖 and how many ⬜, and which account ran them
     - every write made to the logged-in user's own data
     - the dev server URL, left running so the user can do the ⬜ rows
+    - the review: the number of findings, each on its own line with its file and severity, and what happened to it (fixed, declined with the reason, or already addressed)
+    - the resolve pass: how many threads were fixed, declined and already addressed, the ledger comment's URL, and the `verify` result
     - anything you could not verify
 
 ## Body template
@@ -186,3 +206,5 @@ Never log in, log out, or change the user's email or password yourself.
 - **No user-facing changes?** Write "None — developer-facing only." under the heading, and keep a regression row in the QA table for the most exposed surface.
 - **Accurate to the current implementation.** Nothing aspirational, and nothing from an earlier iteration of the branch. If a check was skipped or a behavior couldn't be verified locally (it needs prod data, a logged-in session, or a migration), say so in Notes.
 - **Migrations:** state in Notes whether one is included and how it gets applied. If the repo's `AGENTS.md` says migrations are applied by hand, never run its push or migrate commands yourself.
+- **Every run ends with `/code-review` in a fresh `claude -p` process** (step 10), never in this session or a forked agent. The report lists every finding and what happened to it.
+- **`/resolve-pr-issues` always runs right after the review** (step 11), in this session. Every thread gets a reply and is resolved, every other comment is in the ledger, and `verify` shows no unresolved thread before the report goes out.
