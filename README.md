@@ -53,17 +53,33 @@
 
 ### API First
 
-Every project is API first: the REST API is the spec, and the UI is one of its clients.
+Every project is API first: the REST API is the spec, and the UI is one of its clients. The app, the REST API and the docs all run the same code.
 
-- **Each operation is one documented route.** Define it once with oRPC: `.route({ method, path, tags, summary })`, `.input(zod)`, `.output(zod)`, `.handler(({ context, input }) => module(context.ctx, input))`. Business logic lives in plain modules (`server/modules/*`) that take a context and check permissions; a route only validates, calls a module and returns.
-- **Docs are generated, never hand-written.** The OpenAPI spec comes from the routes (`OpenAPIGenerator` + `ZodToJsonSchemaConverter` from `@orpc/zod/zod4`). It is committed, checked for drift in CI, served at `/api/v1/openapi.json` with an API reference page, and typed clients (CLI, SDKs) are generated from it.
-- **Server Actions call the routes.** Each action is one line in a `"use server"` file, calling the route in-process with the session's context: `export const renameProjectAction = mutation(projects.rename)`. Actions never get their own validation or logic. `mutation()` also calls `refresh()`; both return `{ ok, data } | { ok: false, error }`.
-- **UI-only operations** (previews, bulk reveals) are procedures without `.route()`, kept out of the public router so they never become endpoints.
-- **Two base builders:** `pub` (public) and `authed` (signed in). Attach the bearer security scheme and the shared error responses to their middleware with `customOpenAPIOperation`, so every route documents them.
+- **Each operation is one documented route.** Define every CRUD operation and command once with oRPC: `.route({ method, path, tags, summary })`, `.input(zod)`, `.output(zod)`, `.handler(({ context, input }) => module(context.ctx, input))`. Business logic lives in plain modules (`server/modules/*`) that take a context and check permissions; a route only validates, calls a module and returns.
+- **Server Actions call the routes.** Each action is one line in a `"use server"` file, calling the route in-process with the session's context, never over HTTP: `export const renameProjectAction = mutation(projects.rename)`. Actions and UI handlers never get their own validation or logic. `mutation()` also calls `refresh()`; both return `{ ok, data } | { ok: false, error }`.
+- **One public spec lists every operation.** Generate it from the routes (`OpenAPIGenerator` + `ZodToJsonSchemaConverter` from `@orpc/zod/zod4`), never by hand. Commit it, check it for drift in CI, serve it at `/api/v1/openapi.json` with one public API reference page, and generate typed clients (CLI, SDKs) from it. Operations only the UI calls are in it too, and each says who may call it. The docs gate nothing: each operation's own auth decides access, so there is no public-vs-internal split.
+- **One base builder per kind of caller:** `pub` (anyone), `authed` (signed in), and one that takes a permission for staff. Attach the security scheme, the shared error responses and who may call the route to their middleware with `customOpenAPIOperation`, so every route documents them.
+- **Less code, fewer bugs.** Prefer one generic route or table with a type field over N copies.
 - **One error shape.** Modules throw your own error class; map it to `ORPCError` in one `clientInterceptors` entry and encode one body (`{ error: { code, message } }`) with `customErrorResponseBodyEncoder`.
 - **Always set `.output()`.** It is validated and unknown keys are stripped, so the schema is exactly what clients get. Use `z.date()` for timestamps.
 - **Inputs are compact:** path params plus the JSON body (or the query string for `GET`) arrive as one object. A non-GET route that reads the query string needs `inputStructure: "detailed"`.
 - **Contract test:** replay every route against recorded, normalized responses, so a refactor can't change the public API by accident.
+
+#### Resources
+
+- **CRUD only, plural nouns.** Collection: `GET`, `POST`. Item: `GET`, `PATCH`, `PUT`, `DELETE`. Singleton (`/me/avatar`): `GET`, `PUT`, `DELETE`.
+- **A status change is a `PATCH`** on the resource (`{ status }`, `{ published }`), never a `/publish` or `/cancel` route.
+- **Duplicating is a create:** `POST /things { copyFrom: id }`.
+- **Only real side effects are commands:** `POST /things/{id}/<verb>` for send, retry, stop, test, refund, run.
+
+#### Shared concerns
+
+One route each, never one per resource:
+
+- **Access:** one `GET /me/access` returns the role, plan, permissions and feature flags, computed from one registry of checks. No per-feature availability routes.
+- **Events:** one `POST /events` and one `events` table (`type`, the actor as a user or a guest, the subject, `metadata`, `created_at`). No per-resource click or view routes, counter columns or per-feature event tables. Derive counts with a query, so every event keeps who did it, when, and its metadata.
+- **Pickers:** one `GET /<resource>/options` per resource, filtered by the query string. No picker routes under other resources.
+- **Search:** one `POST /<resource>/search` per resource, taking `{ filters, select }`. No route per projection (ids, emails, rows).
 
 ### UI Libraries
 
