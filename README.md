@@ -62,6 +62,7 @@ Every project is API first: the REST API is the spec, and the UI is one of its c
 - **Less code, fewer bugs.** Prefer one generic route or table with a type field over N copies.
 - **One error shape.** Modules throw your own error class; map it to `ORPCError` in one `clientInterceptors` entry and encode one body (`{ error: { code, message } }`) with `customErrorResponseBodyEncoder`.
 - **Always set `.output()`.** It is validated and unknown keys are stripped, so the schema is exactly what clients get. Use `z.date()` for timestamps.
+- **Every operation shows its response in the docs.** The spec carries a response schema for every operation, so the API reference renders its fields and an example; a response that shows `null` is a bug. `.output()` gives this for free. In a codebase that has no output schemas, generate the response schemas from each operation's TypeScript return type at build time (the compiler over `InferRouterOutputs<typeof router>`, named types as `components/schemas`) and merge them into the spec. Never hand-write a response schema or example.
 - **Inputs are compact:** path params plus the JSON body (or the query string for `GET`) arrive as one object. A non-GET route that reads the query string needs `inputStructure: "detailed"`.
 - **Contract test:** replay every route against recorded, normalized responses, so a refactor can't change the public API by accident.
 
@@ -71,6 +72,8 @@ Every project is API first: the REST API is the spec, and the UI is one of its c
 - **A status change is a `PATCH`** on the resource (`{ status }`, `{ published }`), never a `/publish` or `/cancel` route.
 - **Duplicating is a create:** `POST /things { copyFrom: id }`.
 - **Only real side effects are commands:** `POST /things/{id}/<verb>` for send, retry, stop, test, refund, run.
+- **One list per collection.** A narrower view of the same rows is a query parameter on the list (`?status=running`, `?select=ids`, `?include=conditions`, `?parentId=`), never a sibling route (`/active`, `/ids`, `/with-conditions`, the same children listed under two parents). A second route is right only when the shape or the audience differs: a public read model next to the staff list, or an aggregate.
+- **Per-user routes live once** at `/users/{userId}/…`, and `userId` may be `me`. No `/me/…` twin of a `/users/{userId}/…` route; `/me/…` is only for what exists for the caller alone.
 
 #### Shared concerns
 
