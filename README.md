@@ -44,6 +44,7 @@
 | [Vercel Blob](https://vercel.com/docs/vercel-blob) | File storage for uploads. Use a private store for user documents.                                      |
 | [t3-env](https://env.t3.gg/)                       | Type-safe environment variables, validated with Zod at build time.                                     |
 | [Zod](https://zod.dev/)                            | Schema validation for inputs, env vars and LLM output.                                                 |
+| [oRPC](https://orpc.dev/)                          | API operations defined once; server actions, REST routes and the OpenAPI spec are built from them.     |
 | [next-intl](https://next-intl.dev/)                | i18n for the App Router.                                                                               |
 | [React Hook Form](https://react-hook-form.com/)    | Form state and validation.                                                                             |
 | [Zustand](https://github.com/pmndrs/zustand)       | Small client-state store, for persisted browser state only.                                            |
@@ -117,5 +118,6 @@ npx skills add alon710/configs -s '*' -g           # everything
 | [vercel-log-debug](./skills/vercel-log-debug)       | Pulls Vercel production error logs, ranks them, traces each to source, and writes a fix report.                                             |
 | [codebase-audit](./skills/codebase-audit)           | Evidence-backed audit for dead code, duplication, over-abstraction and perf/cost wins; files tickets after approval.                        |
 | [component-drilldown](./skills/component-drilldown) | Explains, fixes, or consolidates UI components: variants, usages, and repo conventions.                                                     |
+| [api-first](./skills/api-first)                     | Defines every CRUD operation and command once as an API operation; actions, CLI and MCP tools only wrap it.                                 |
 | [demo-video](./skills/demo-video)                   | Product demo videos as code: HTML recreating the real UI, a pure `seek(t)` on a beat grid, rendered to MP4.                                 |
 | [design-variants](./skills/design-variants)         | Builds 4-5 genuinely different UI/UX variants of a section in the project's own design system, with real content, then implements the pick. |
