@@ -30,25 +30,40 @@
 
 ### Web App Stack
 
-| Tool                                               | Description                                                                                            |
-| -------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
-| [Bun](https://bun.sh/)                             | Package manager and script runner. Use `bun run <script>`; bare `bun test` runs Bun's own test runner. |
-| [Next.js](https://nextjs.org/)                     | React framework: App Router, Turbopack, Cache Components.                                              |
-| [TypeScript](https://www.typescriptlang.org/)      | Strict mode, no `any`.                                                                                 |
-| [Vercel](https://vercel.com/)                      | Hosting, preview deploys and cron jobs (`vercel.json`).                                                |
-| [Neon](https://neon.com/)                          | Serverless Postgres with branching.                                                                    |
-| [Drizzle ORM](https://orm.drizzle.team/)           | Type-safe SQL and migrations. The `neon-http` driver has no transactions: use `db.batch`.              |
-| [Better Auth](https://www.better-auth.com/)        | Auth with email + password, Google, email OTP and admin roles, via the Drizzle adapter.                |
-| [Resend](https://resend.com/)                      | Transactional email API with signed webhooks.                                                          |
-| [React Email](https://react.email/)                | Email templates as React components, with a local preview server.                                      |
-| [Vercel Blob](https://vercel.com/docs/vercel-blob) | File storage for uploads. Use a private store for user documents.                                      |
-| [t3-env](https://env.t3.gg/)                       | Type-safe environment variables, validated with Zod at build time.                                     |
-| [Zod](https://zod.dev/)                            | Schema validation for inputs, env vars and LLM output.                                                 |
-| [next-intl](https://next-intl.dev/)                | i18n for the App Router.                                                                               |
-| [React Hook Form](https://react-hook-form.com/)    | Form state and validation.                                                                             |
-| [Zustand](https://github.com/pmndrs/zustand)       | Small client-state store, for persisted browser state only.                                            |
-| [AI SDK](https://ai-sdk.dev/)                      | LLM calls, tool use and streaming chat UI.                                                             |
-| [AI Gateway](https://vercel.com/docs/ai-gateway)   | One key for every model provider, addressed by `provider/model` slugs.                                 |
+| Tool                                               | Description                                                                                                       |
+| -------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| [Bun](https://bun.sh/)                             | Package manager and script runner. Use `bun run <script>`; bare `bun test` runs Bun's own test runner.            |
+| [Next.js](https://nextjs.org/)                     | React framework: App Router, Turbopack, Cache Components.                                                         |
+| [TypeScript](https://www.typescriptlang.org/)      | Strict mode, no `any`.                                                                                            |
+| [Vercel](https://vercel.com/)                      | Hosting, preview deploys and cron jobs (`vercel.json`).                                                           |
+| [Neon](https://neon.com/)                          | Serverless Postgres with branching.                                                                               |
+| [Drizzle ORM](https://orm.drizzle.team/)           | Type-safe SQL and migrations. The `neon-http` driver has no transactions: use `db.batch`.                         |
+| [Better Auth](https://www.better-auth.com/)        | Auth with email + password, Google, email OTP and admin roles, via the Drizzle adapter.                           |
+| [Resend](https://resend.com/)                      | Transactional email API with signed webhooks.                                                                     |
+| [React Email](https://react.email/)                | Email templates as React components, with a local preview server.                                                 |
+| [Vercel Blob](https://vercel.com/docs/vercel-blob) | File storage for uploads. Use a private store for user documents.                                                 |
+| [t3-env](https://env.t3.gg/)                       | Type-safe environment variables, validated with Zod at build time.                                                |
+| [Zod](https://zod.dev/)                            | Schema validation for inputs, env vars and LLM output.                                                            |
+| [oRPC](https://orpc.dev/)                          | API-first routes with a generated OpenAPI spec; Server Actions call them in-process. See [API First](#api-first). |
+| [next-intl](https://next-intl.dev/)                | i18n for the App Router.                                                                                          |
+| [React Hook Form](https://react-hook-form.com/)    | Form state and validation.                                                                                        |
+| [Zustand](https://github.com/pmndrs/zustand)       | Small client-state store, for persisted browser state only.                                                       |
+| [AI SDK](https://ai-sdk.dev/)                      | LLM calls, tool use and streaming chat UI.                                                                        |
+| [AI Gateway](https://vercel.com/docs/ai-gateway)   | One key for every model provider, addressed by `provider/model` slugs.                                            |
+
+### API First
+
+Every project is API first: the REST API is the spec, and the UI is one of its clients.
+
+- **Each operation is one documented route.** Define it once with oRPC: `.route({ method, path, tags, summary })`, `.input(zod)`, `.output(zod)`, `.handler(({ context, input }) => module(context.ctx, input))`. Business logic lives in plain modules (`server/modules/*`) that take a context and check permissions; a route only validates, calls a module and returns.
+- **Docs are generated, never hand-written.** The OpenAPI spec comes from the routes (`OpenAPIGenerator` + `ZodToJsonSchemaConverter` from `@orpc/zod/zod4`). It is committed, checked for drift in CI, served at `/api/v1/openapi.json` with an API reference page, and typed clients (CLI, SDKs) are generated from it.
+- **Server Actions call the routes.** Each action is one line in a `"use server"` file, calling the route in-process with the session's context: `export const renameProjectAction = mutation(projects.rename)`. Actions never get their own validation or logic. `mutation()` also calls `refresh()`; both return `{ ok, data } | { ok: false, error }`.
+- **UI-only operations** (previews, bulk reveals) are procedures without `.route()`, kept out of the public router so they never become endpoints.
+- **Two base builders:** `pub` (public) and `authed` (signed in). Attach the bearer security scheme and the shared error responses to their middleware with `customOpenAPIOperation`, so every route documents them.
+- **One error shape.** Modules throw your own error class; map it to `ORPCError` in one `clientInterceptors` entry and encode one body (`{ error: { code, message } }`) with `customErrorResponseBodyEncoder`.
+- **Always set `.output()`.** It is validated and unknown keys are stripped, so the schema is exactly what clients get. Use `z.date()` for timestamps.
+- **Inputs are compact:** path params plus the JSON body (or the query string for `GET`) arrive as one object. A non-GET route that reads the query string needs `inputStructure: "detailed"`.
+- **Contract test:** replay every route against recorded, normalized responses, so a refactor can't change the public API by accident.
 
 ### UI Libraries
 
