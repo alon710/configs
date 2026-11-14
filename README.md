@@ -72,7 +72,8 @@ Every project is API first: the REST API is the spec, and the UI is one of its c
 - **A status change is a `PATCH`** on the resource (`{ status }`, `{ published }`), never a `/publish` or `/cancel` route.
 - **Duplicating is a create:** `POST /things { copyFrom: id }`.
 - **Only real side effects are commands:** `POST /things/{id}/<verb>` for send, retry, stop, test, refund, run.
-- **One list per collection.** A narrower view of the same rows is a query parameter on the list (`?status=running`, `?select=ids`, `?include=conditions`, `?parentId=`), never a sibling route (`/active`, `/ids`, `/with-conditions`, the same children listed under two parents). A second route is right only when the shape or the audience differs: a public read model next to the staff list, or an aggregate.
+- **One list per collection.** A narrower view of the same rows is a query parameter on the list (`?status=running`, `?select=ids`, `?include=conditions`, `?parentId=`, `?view=`), never a sibling route (`/active`, `/ids`, `/with-conditions`, `/personal`, the same children listed under two parents). That holds across audiences too: a public read and the staff list of the same rows are one route with a view, the public view as open as before and the staff view behind its permission, checked inside the handler. A second route is right only for a different format (a CSV export) or an input too big for a query string (`POST …/sort` with a body).
+- **One record, parts by `include`.** A resource's own data is one `GET /things/{id}?include=a,b`, each part checked against its own permission, not a route per part (`/summary`, `/billing`, `/progress`). Its edits are one `PATCH /things/{id}` with a field per change, each with its own permission.
 - **Per-user routes live once** at `/users/{userId}/…`, and `userId` may be `me`. No `/me/…` twin of a `/users/{userId}/…` route; `/me/…` is only for what exists for the caller alone.
 
 #### Shared concerns
