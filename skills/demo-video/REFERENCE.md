@@ -39,15 +39,18 @@ The film has no build step and no Tailwind, so every token becomes a literal val
 
 1. Find the source:
    ```sh
-   grep -rlE --include='*.css' '^\s*--[a-z0-9-]+\s*:' . --exclude-dir=node_modules | head   # CSS custom properties
-   grep -rl --include='*.css' '@theme' . --exclude-dir=node_modules; ls tailwind.config.* 2>/dev/null  # Tailwind v4 / v3
-   ls design.md DESIGN.md docs/design* 2>/dev/null                                            # a written spec
+   grep -rlE --include='*.css' --include='*.scss' --include='*.less' --include='*.vue' --include='*.svelte' \
+     '^\s*--[a-z0-9-]+\s*:' . --exclude-dir=node_modules | head                               # CSS custom properties
+   grep -rl --include='*.css' '@theme' . --exclude-dir=node_modules; find . -maxdepth 1 -name 'tailwind.config.*'  # Tailwind v4 / v3
+   grep -rlE --include='*.scss' --include='*.less' '^\s*[$@][a-z][a-z0-9_-]*\s*:' . --exclude-dir=node_modules | head  # Sass / Less variables
+   find . -maxdepth 2 \( -iname design.md -o -path './docs/design*' \) -not -path '*/node_modules/*'  # a written spec
    ```
+   Other places tokens live: a CSS-in-JS theme object (MUI, Chakra, Mantine, styled-components), `panda.config.*` or `stitches.config.*`, vanilla-extract `*.css.ts` themes, and design-token JSON (DTCG, Style Dictionary, Tokens Studio; read the source files, not the build output).
 2. Resolve `var()` chains to literal colours. If the app runs locally, read the resolved values from the live page instead: `getComputedStyle(document.documentElement).getPropertyValue('--primary')`. Hex, rgb, hsl, and oklch all work in Chrome.
 3. Use the theme the product ships by default (usually light), unless the brief says otherwise.
 4. Add tokens as the scenes need them: status colours with their tint and text pairs, feature-icon background and glyph pairs, brand gradients, shadows, and radii. Derive alpha variants with `color-mix(in srgb, var(--primary) 14%, transparent)`, never by re-typing a hex.
 
-**Font.** Use the product's font. `FONT=<id> new-film.sh` fetches any Fontsource family and writes `fonts/fonts.css`, which defines `--font`. Fontsource mirrors Google Fonts, so a family loaded through `next/font/google` or a Google Fonts `<link>` is available there. Add `FONT_SUBSETS` for every script the copy uses. For a licensed or self-hosted font, copy its woff2 files into `fonts/` and write `fonts.css` by hand. `window.ready` loads every declared face and rejects if one fails, so a missing file fails the render instead of silently falling back.
+**Font.** Use the product's font. `FONT=<id> new-film.sh` fetches any Fontsource family and writes `fonts/fonts.css`, which defines `--font`. Fontsource mirrors Google Fonts, so a family loaded through `next/font/google` or a Google Fonts `<link>` is available there. A product that depends on `@fontsource/<id>` already names the id. Add `FONT_SUBSETS` for every script the copy uses. For a licensed or self-hosted font, copy its woff2 files into `fonts/` and write `fonts.css` by hand. `window.ready` loads every declared face and rejects if one fails, so a missing file fails the render instead of silently falling back.
 
 Check a font file before relying on it. Each Fontsource file covers one subset's range, so check the file meant to cover the characters:
 
@@ -73,6 +76,7 @@ If the font has `tnum`, use `font-variant-numeric: tabular-nums` and make `tab()
 - `node $K/icons.mjs <name>` prints lucide `<symbol>`s.
 - `node $K/icons.mjs path/to/icon.svg` handles any set that ships SVG files.
 - `node $K/icons.mjs social:instagram` prints a round social icon: a brand-coloured glyph on `SOCIAL_BG`, with `fill-rule="evenodd"` on both paths.
+- `icons.mjs` reads `./node_modules`. When the product uses another lucide package (`lucide-vue-next`, `lucide-svelte`, `lucide-angular`) or has no `react-social-icons`, install `lucide-static` or `react-social-icons` into the tools folder (`cd ~/.cache/demo-video-tools && npm i lucide-static react-social-icons`) and run with `NODE_MODULES=~/.cache/demo-video-tools/node_modules`. For a set that ships only an icon font or components, find its SVG files and pass their paths.
 
 The template's `.ic` class assumes outline icons with a 2 px stroke; change it if the product's set differs.
 

@@ -1,6 +1,6 @@
 ---
 name: codebase-audit
-description: Audits a codebase, or one domain, directory, or component tree, for dead code, duplicate or inconsistent components, over-abstraction, and easy performance, bundle, and infra-cost wins. Produces an evidence-backed, triaged review for approval first, and files tickets (Linear or GitHub Issues) only after the user picks findings by number. Keeps a ledger so declined findings do not come back. Use when asked to audit or review code for consistency, dead code, duplication, simplification, bundle size, runtime or billing cost, maintainability, or tech debt, to "find cleanup work", "what can we delete", or "make this simpler", or to turn such a review into tickets.
+description: Audits a codebase, or one domain, directory, or component tree, for dead code, duplicate or inconsistent components, over-abstraction, and easy performance, bundle, and infra-cost wins, on any stack. Produces an evidence-backed, triaged review for approval first, and files tickets in the repo's issue tracker (Linear, Jira, GitHub Issues, GitLab, …) only after the user picks findings by number, or hands over ready-to-paste drafts when no tracker is connected. Keeps a ledger so declined findings do not come back. Use when asked to audit or review code for consistency, dead code, duplication, simplification, bundle size, runtime or billing cost, maintainability, or tech debt, to "find cleanup work", "what can we delete", or "make this simpler", or to turn such a review into tickets.
 ---
 
 # Codebase audit
@@ -15,9 +15,9 @@ Find focused, evidence-backed changes that make a codebase **smaller, simpler, f
 ## Workflow
 
 1. **Scope it.** Whole-repo audits produce unreadable reviews. Default to one of: a domain or feature directory, one component tree, or the diff since the last audit (`git diff --stat <last-audit-sha>..HEAD`). If the user gave no scope, propose one and the lenses you will run, then proceed. Do not block on an answer.
-2. **Learn the repo.** Read `AGENTS.md`, `CLAUDE.md`, `CONTRIBUTING.md`, and any design or architecture doc they link. Note:
-   - the package manager, from the lockfile, and the gate scripts in `package.json` (typecheck, lint, test, knip, format, i18n check);
-   - the shared primitives: component library directory, formatters, loaders, empty states, table and filter patterns;
+2. **Learn the repo.** Read `AGENTS.md`, `CLAUDE.md` (or the agent's own instructions file), `CONTRIBUTING.md`, and any design or architecture doc they link. Note:
+   - the stack and package manager, from the lockfiles (see the conventions in [LENSES.md](LENSES.md)), and the gate commands (typecheck, lint, test, dead-code check such as knip, format, i18n check) from `package.json` scripts, `pyproject.toml`, a `Makefile`, `justfile`, or `Taskfile.yml`, or the CI config;
+   - the shared primitives: component library directory, formatters, loaders, empty states, table and filter patterns, or a backend's shared helpers, base classes, and error and logging conventions;
    - every rule the repo states by name. Recommendations must reuse patterns that already exist here.
 3. **Check the ledger.** Confirm `.context/` is git-ignored, then read prior reviews in `.context/audits/` (see [Ledger](#ledger)). Never re-report a finding the user declined. If one resurfaces, list it under `Deliberately not flagged` as `previously declined (<date>)`.
 4. **Run the scan**, then verify each lead by hand:
@@ -25,11 +25,11 @@ Find focused, evidence-backed changes that make a codebase **smaller, simpler, f
    mkdir -p .context/audits
    bash <skill-dir>/scripts/audit-scan.sh [scope-path ...] > .context/audits/<date>-<scope>.scan.txt
    ```
-   It runs knip (only when installed, and never a `--fix` script), zero-importer components, name-cluster duplication, variant tables, and convention-drift greps for loaders, raw colours, formatting, i18n, RTL, fan-out, heavy deps, paid-service calls, and schedules. It uses ripgrep when available and grep otherwise. Per-lens detectors, the evidence bar, and known false positives are in [LENSES.md](LENSES.md).
+   It runs knip (only when installed, and never a `--fix` script), zero-importer components, name-cluster duplication, variant tables, and convention-drift greps for loaders, raw colours, formatting, i18n, RTL, fan-out, heavy deps, paid-service calls, and schedules. It uses ripgrep when available and grep otherwise. The knip, component, and UI sections are for JS/TS front-ends: on other stacks the scan says which sections it skipped and still runs name clusters, largest files, fan-out and HTTP calls (Python, Go), paid-service calls, schedules, suppressions, and TODOs. Per-lens detectors for every stack, the evidence bar, and known false positives are in [LENSES.md](LENSES.md).
 5. **Read before recommending.** Open every file a lead points at. A "duplicate" is a duplicate only after you have read both implementations. "Unused" holds only after you have ruled out the dynamic references listed in LENSES.md.
 6. **Triage** every confirmed lead with the fields below. Drop the rest silently, or list genuinely uncertain ones as unverified leads, with what it would take to confirm them.
 7. **Write the review** (format below) to `.context/audits/<YYYY-MM-DD>-<scope>.md` and summarize it in chat. **Stop.** Ask which numbers to file.
-8. **After approval only:** file the approved findings per [FILING.md](FILING.md). Then append each finding's outcome (`filed as <id>` or `declined by user`) to the review file so the next audit skips it.
+8. **After approval only:** detect the repo's tracker and file the approved findings per [FILING.md](FILING.md). If no tool for that tracker is connected, hand the user ready-to-paste drafts instead of filing anywhere else. Then append each finding's outcome (`filed as <id>`, `drafted for the user`, or `declined by user`) to the review file so the next audit skips it.
 
 ## Ledger
 
@@ -49,10 +49,10 @@ Run every lens that applies to the scope. Detectors and false positives: [LENSES
 |---|---|
 | Dead weight | unused components, variants, exports, utils, tokens, translation keys, dependencies, tables and columns |
 | Duplication | near-identical components or logic that should collapse into one with a variant or prop |
-| Consistency | the same UI pattern built differently across screens: badges, empty states, loaders, filters, forms, dates |
+| Consistency | the same UI pattern built differently across screens: badges, empty states, loaders, filters, forms, dates; or the same backend pattern built differently across handlers: errors, logging, config, retries |
 | Simplicity | over-abstraction: wrappers with one caller, config objects for two cases, generics used once |
 | Performance | avoidable client components, request waterfalls, unmemoized heavy work, N+1 queries, unbounded fan-out |
-| Bundle | heavy dependencies in client code, modals and editors that are not lazy-loaded, two libraries doing one job |
+| Bundle | web front-ends only: heavy dependencies in client code, modals and editors that are not lazy-loaded, two libraries doing one job |
 | Cost | redundant AI calls, unbatched email sends, per-row DB queries, uncached object-storage or API hits, cron frequency |
 | DX | patterns that fail silently, a missing shared helper, test gaps around the code a finding changes, docs that drifted from code |
 

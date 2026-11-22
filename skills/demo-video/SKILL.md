@@ -28,8 +28,8 @@ node $K/render.mjs video/launch                                             # fu
 
 ## Workflow
 
-- [ ] **Settle the brief before writing code.** Offer `/grill-me` if the user wants to be interviewed. Settle placement (it sets the aspect ratio and minimum text size), length, one story, headlines or voiceover, layout, and which numbers and named examples may appear. Defaults and reasons: [REFERENCE.md → Brief](REFERENCE.md#brief).
-- [ ] **Load the design system from the product repo:** colour tokens, radii, shadows, font, logo, and icon set. Fill the template's token block from them. Never invent a value, and never ship the placeholders. See [Design tokens](REFERENCE.md#design-tokens).
+- [ ] **Settle the brief before writing code.** Offer the `grill-me` skill if the user wants to be interviewed (Claude Code: `/grill-me`; other agents: load its `SKILL.md`). Settle placement (it sets the aspect ratio and minimum text size), length, one story, headlines or voiceover, layout, and which numbers and named examples may appear. Defaults and reasons: [REFERENCE.md → Brief](REFERENCE.md#brief).
+- [ ] **Load the design system from the product repo:** colour tokens, radii, shadows, font, logo, and icon set, from whatever the product uses (CSS variables, Tailwind, Sass, a CSS-in-JS theme, token JSON). Fill the template's token block from them. Never invent a value, and never ship the placeholders. See [Design tokens](REFERENCE.md#design-tokens).
 - [ ] **Verify every claim.** Each number on screen comes from a read-only query against real data at build time, rounded down. Never take one from marketing copy, which often carries hardcoded offsets. Named examples (accounts, items, prices) stay generic unless the user supplies real ones. Check supplied ones against the data, and flag mismatches instead of silently fixing them.
 - [ ] **Measure the music** with `beats.py`. Treat the tempo as exact only when the grid residual is a few ms. Cut only on seams that keep the bar's position in the chord cycle (usually 4 bars), and end on the song's own ending. See [Music](REFERENCE.md#music).
 - [ ] **Show the beat map** (bar, time, scene, action, sound) and wait for an OK when the user wants to review first.
@@ -66,7 +66,7 @@ node $K/render.mjs video/launch                                             # fu
 ## Files
 
 - [REFERENCE.md](REFERENCE.md): brief defaults, recurring review notes, design tokens at film scale, recreating real UI, the engine API, music and sound, right-to-left rules, the QA checklist, MP4 verification, and gotchas.
-- `scripts/setup.sh`: one-time install of a Python venv (numpy, imageio-ffmpeg, pillow, fonttools) and Playwright into `$VIDEO_TOOLS`, default `~/.cache/demo-video-tools`.
+- `scripts/setup.sh`: one-time install of a Python venv (numpy, imageio-ffmpeg, pillow, fonttools) and Playwright into `$VIDEO_TOOLS`, default `~/.cache/demo-video-tools`. Needs Node with npm, Python 3, and Google Chrome (or Playwright's bundled Chromium).
 - `scripts/new-film.sh`: scaffolds a film. Takes `FONT=<fontsource-id>`, `FONT_WEIGHTS`, and `FONT_SUBSETS`, plus asset files to copy.
 - `scripts/template.html`: the starter film, with the engine, a token block, and three placeholder scenes.
 - `scripts/beats.py` measures the song. `scripts/audio.py` builds `audio.wav` from the edit plus UI sounds.

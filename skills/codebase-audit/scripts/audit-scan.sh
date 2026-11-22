@@ -7,6 +7,10 @@
 #   bash <skill-dir>/scripts/audit-scan.sh src/features/billing     # one or more scope paths
 #   SKIP_KNIP=1 bash <skill-dir>/scripts/audit-scan.sh              # skip the slow knip step
 #
+# Works on any stack. The JS/TS and UI sections run only when the scope has such files;
+# otherwise they print why they were skipped. Name clusters, largest files, paid-service
+# calls, schedules, suppressions and TODOs run on whatever source languages the scope holds.
+#
 # Uses ripgrep when it is installed and falls back to grep/find otherwise.
 # Never runs a fixer, never installs or downloads anything, never writes to the repo.
 # Portable to bash 3.2 (the macOS default): no associative arrays, no mapfile.
@@ -16,11 +20,15 @@ have() { command -v "$1" >/dev/null 2>&1; }
 HAVE_RG=0
 have rg && HAVE_RG=1
 
-EXCLUDE_DIRS=(node_modules .git dist build out .next .nuxt .svelte-kit .turbo .vercel .output .cache coverage vendor storybook-static .context)
-EXCLUDE_FILES=('*.test.*' '*.spec.*' '*.stories.*' '*.d.ts' '*.min.js' '*.map')
+EXCLUDE_DIRS=(node_modules .git dist build out .next .nuxt .svelte-kit .turbo .vercel .output .cache coverage vendor storybook-static .context
+  .venv venv __pycache__ .tox .mypy_cache .pytest_cache .ruff_cache target _build .gradle)
+EXCLUDE_FILES=('*.test.*' '*.spec.*' '*.stories.*' '*.d.ts' '*.min.js' '*.map'
+  'test_*.py' '*_test.py' 'conftest.py' '*_test.go' '*_spec.rb' '*_test.rb')
 SRC_EXT="ts,tsx,js,jsx,mjs,cjs,vue,svelte,astro"
 UI_EXT="tsx,jsx,vue,svelte,astro"
 TS_EXT="ts,tsx"
+# Every source extension the scan knows. The stack-neutral sections use the ones present.
+ALL_EXT="$SRC_EXT,py,go,rs,rb,php,ex,exs,java,kt,scala,cs,swift,dart,c,cc,cpp,h,hpp"
 Q="['\"]"
 NQ="[^'\"]"
 
@@ -36,7 +44,8 @@ trap 'rm -rf "$WORK"' EXIT
 search() {
   local mode="$1" exts="$2" pat="$3" e d f
   shift 3
-  [ $# -gt 0 ] || return 0
+  # No extensions must mean no files: without an include glob, rg would search everything.
+  [ -n "$exts" ] && [ $# -gt 0 ] || return 0
   local args=()
   if [ "$HAVE_RG" = 1 ]; then
     case "$mode" in n) args=(-n -H --no-heading) ;; l) args=(-l) ;; o) args=(-o -N --no-filename) ;; esac
@@ -59,7 +68,7 @@ search() {
 list_files() {
   local exts="$1" e d f
   shift
-  [ $# -gt 0 ] || return 0
+  [ -n "$exts" ] && [ $# -gt 0 ] || return 0
   if [ "$HAVE_RG" = 1 ]; then
     local args=()
     for e in $(echo "$exts" | tr ',' ' '); do args+=(-g "*.$e"); done
@@ -125,9 +134,67 @@ script_body() {
 has_script() { case " $SCRIPTS " in *" $1 "*) return 0 ;; esac; return 1; }
 has_dep() { [ -f package.json ] && grep -Eq "\"$1\"[[:space:]]*:" package.json; }
 
+# --- stack helpers ---
+# exts_in PATH...: the source extensions (from ALL_EXT) that have files under PATH, comma-separated.
+exts_in() {
+  list_files "$ALL_EXT" "$@" | sed -n 's/.*\.\([A-Za-z0-9]*\)$/\1/p' | sort -u | tr '\n' ',' | sed 's/,$//'
+}
+# overlap A B: true when the comma lists A and B share an entry.
+overlap() {
+  local a
+  for a in $(echo "$1" | tr ',' ' '); do
+    case ",$2," in *",$a,"*) return 0 ;; esac
+  done
+  return 1
+}
+# drop A B: the entries of A that are not in B, comma-separated.
+drop() {
+  local a out=""
+  for a in $(echo "$1" | tr ',' ' '); do
+    case ",$2," in *",$a,"*) ;; *) out="$out,$a" ;; esac
+  done
+  echo "${out#,}"
+}
+# Manifests and lockfiles in the current directory, as stack:tool pairs.
+detect_stacks() {
+  local s=""
+  [ -f package.json ] && s="$s js:$PM"
+  if [ -f uv.lock ]; then s="$s python:uv"
+  elif [ -f poetry.lock ]; then s="$s python:poetry"
+  elif [ -f Pipfile.lock ] || [ -f Pipfile ]; then s="$s python:pipenv"
+  elif [ -f pyproject.toml ] || [ -f requirements.txt ] || [ -f setup.py ]; then s="$s python:pip"
+  fi
+  [ -f go.mod ] && s="$s go"
+  [ -f Cargo.toml ] && s="$s rust:cargo"
+  [ -f Gemfile ] && s="$s ruby:bundler"
+  [ -f composer.json ] && s="$s php:composer"
+  [ -f mix.exs ] && s="$s elixir:mix"
+  [ -f pom.xml ] && s="$s jvm:maven"
+  if [ -f build.gradle ] || [ -f build.gradle.kts ]; then s="$s jvm:gradle"; fi
+  [ -n "$(find . -maxdepth 2 \( -name '*.csproj' -o -name '*.sln' \) -print 2>/dev/null | head -1)" ] && s="$s dotnet"
+  [ -f Package.swift ] && s="$s swift"
+  echo "${s:- (no manifest in the current directory)}"
+}
+# runner_targets FILE: target / recipe / task names, read as text. Nothing is executed.
+runner_targets() {
+  case "$1" in
+    Makefile | makefile | GNUmakefile)
+      grep -E '^[A-Za-z0-9][A-Za-z0-9_.-]*:([^=]|$)' "$1" | cut -d: -f1 ;;
+    justfile | Justfile | .justfile)
+      grep -E '^@?[A-Za-z0-9_-]+([[:space:]][^:]*)?:([^=]|$)' "$1" | sed -E 's/^@?([A-Za-z0-9_-]+).*/\1/' ;;
+    Taskfile.yml | Taskfile.yaml | taskfile.yml | taskfile.yaml)
+      awk '/^tasks:/ {f = 1; next} f && /^[^[:space:]#]/ {exit}
+           f && match($0, /^  [A-Za-z0-9_.:-]+:/) {print substr($0, 3, RLENGTH - 3)}' "$1" ;;
+  esac 2>/dev/null | sort -u
+}
+is_gate() {
+  case "$1" in *type*|*tsc*|*lint*|*test*|*knip*|*format*|*fmt*|*i18n*|*check*|*vet*|*clippy*|ci|*:ci|build) return 0 ;; esac
+  return 1
+}
+
 # --- scope ---
 ROOTS=()
-for d in src app components features lib hooks utils pages server modules packages apps; do
+for d in src app components features lib hooks utils pages server modules packages apps cmd internal pkg; do
   [ -d "$d" ] && ROOTS+=("$d")
 done
 [ ${#ROOTS[@]} -eq 0 ] && ROOTS=(.)
@@ -147,6 +214,17 @@ fi
 PM=$(detect_pm)
 SCRIPTS=$(script_names)
 
+# Which languages the scope and the source roots hold. JS/TS and UI sections key off these.
+SCOPE_EXT=$(exts_in "${TARGET[@]}")
+ROOT_EXT=$(exts_in "${ROOTS[@]}")
+HAS_JS=0
+overlap "$SRC_EXT" "$SCOPE_EXT" && HAS_JS=1
+HAS_UI=0
+overlap "$UI_EXT" "$SCOPE_EXT" && HAS_UI=1
+OTHER_EXT=$(drop "$SCOPE_EXT" "$SRC_EXT")
+NO_JS="no JS/TS files in scope: skipped; this check is for JS/TS code"
+NO_UI="no .tsx/.jsx/.vue/.svelte/.astro files in scope: skipped; this check is for JS UI code"
+
 echo "# audit scan: scope ${TARGET[*]} @ $(git rev-parse --short HEAD 2>/dev/null || echo 'no-git')"
 
 TOP=$(git rev-parse --show-toplevel 2>/dev/null)
@@ -164,12 +242,27 @@ if [ -n "$PM" ]; then
   done
   printf '   gate-like scripts:%s\n' "${gates:- (none)}"
 else
-  note "no package.json: JS-specific sections will be mostly empty"
+  note "no package.json: knip and the bundle checks are skipped"
+fi
+printf '   stack (manifests):%s\n' "$(detect_stacks)"
+printf '   source extensions in scope: %s\n' "${SCOPE_EXT:-(none)}"
+# Task runners often wrap the gates on non-JS stacks. ls -A gives exact-case names, so a
+# case-insensitive file system does not report one Makefile twice.
+for f in $(ls -A 2>/dev/null); do
+  case "$f" in Makefile|makefile|GNUmakefile|justfile|Justfile|.justfile|Taskfile.yml|Taskfile.yaml|taskfile.yml|taskfile.yaml) ;; *) continue ;; esac
+  [ -f "$f" ] || continue
+  gates=""
+  for t in $(runner_targets "$f"); do is_gate "$t" && gates="$gates $t"; done
+  printf '   %s gate-like targets:%s\n' "$f" "${gates:- (none)}"
+done
+if [ "$HAS_JS" = 0 ]; then
+  note "no JS/TS files in scope: the JS and UI sections 2, 4-10, 12 and the JS part of 13 are skipped; LENSES.md has the follow-ups for other stacks"
 fi
 docs=""
-for f in AGENTS.md CLAUDE.md CONTRIBUTING.md .cursorrules design.md DESIGN.md docs/architecture.md; do
+for f in AGENTS.md CLAUDE.md GEMINI.md CONTRIBUTING.md .cursorrules .github/copilot-instructions.md design.md DESIGN.md docs/architecture.md; do
   [ -f "$f" ] && docs="$docs $f"
 done
+[ -d .cursor/rules ] && docs="$docs .cursor/rules/"
 printf '   instruction docs:%s\n' "${docs:- (none found; ask the user where conventions live)}"
 if [ -d .context/audits ]; then
   printf '   prior audits in .context/audits: %s file(s)\n' "$(find .context/audits -type f -name '*.md' 2>/dev/null | wc -l | tr -d ' ')"
@@ -181,7 +274,10 @@ h "1. DEAD WEIGHT - knip (unused files, exports, deps)"
 if [ "${SKIP_KNIP:-0}" = "1" ]; then
   note "skipped via SKIP_KNIP=1"
 elif [ ! -f package.json ]; then
-  note "no package.json: skipped"
+  note "no package.json: skipped; knip is for JS/TS"
+  dc=""
+  for t in vulture deptry staticcheck deadcode cargo-machete; do have "$t" && dc="$dc $t"; done
+  note "dead-code tools for other stacks on PATH:${dc:- none}. See LENSES.md section 1; never install one during an audit."
 else
   KNIP=()
   if has_script knip; then
@@ -208,7 +304,9 @@ fi
 MAXC=0
 [ "$SCOPED" = 1 ] && MAXC=1
 h "2. DEAD WEIGHT - UI component files with <= $MAXC importer(s)"
-if has_dep nuxt || has_dep unplugin-vue-components || has_dep '@nuxt/[a-z-]+'; then
+if [ "$HAS_UI" = 0 ]; then
+  note "$NO_UI"
+elif has_dep nuxt || has_dep unplugin-vue-components || has_dep '@nuxt/[a-z-]+'; then
   note "components are auto-imported here (Nuxt/unplugin): import counts are meaningless, skipped"
 else
   # Basename of every import / re-export / dynamic import / require specifier in the repo.
@@ -245,8 +343,17 @@ else
   note "0 = delete candidate, 1 = inline candidate. Rule out dynamic/lazy imports, MDX, and string registries first."
 fi
 
-h "3. DUPLICATION - component files clustered by trailing name token (repo-wide)"
-list_files "$UI_EXT" "${ROOTS[@]}" | grep -Ev "$ENTRY_RE" | awk '{
+# Component files when the repo has a UI; otherwise every source file, so services,
+# handlers and models still cluster on other stacks.
+CL_EXT="$UI_EXT"
+CL_WHAT="component files"
+if ! overlap "$UI_EXT" "$ROOT_EXT"; then
+  CL_EXT="$ROOT_EXT"
+  CL_WHAT="source files"
+fi
+h "3. DUPLICATION - $CL_WHAT clustered by trailing name token (repo-wide)"
+[ "$CL_WHAT" = "source files" ] && [ -n "$CL_EXT" ] && note "no UI component files: clustering $CL_EXT files instead"
+list_files "$CL_EXT" "${ROOTS[@]}" | grep -Ev "$ENTRY_RE" | awk '{
   p = $0; n = p; sub(/.*\//, "", n); sub(/\.[^.]+$/, "", n)
   if (n == "index") { d = p; sub(/\/[^\/]*$/, "", d); n = d; sub(/.*\//, "", n) }
   t = ""
@@ -259,33 +366,57 @@ if [ -s "$WORK/clusters" ]; then
     printf '  %3d x *%s\n' "$cnt" "$tok"
     awk -F'\t' -v t="$tok" '$1 == t {print "        " $2}' "$WORK/tokens" | head -6
   done <"$WORK/clusters"
-  note "same suffix is a lead only: diff the members before calling them duplicates"
+  if [ "$CL_WHAT" = "source files" ]; then
+    note "same suffix is a lead only: framework conventions (*_controller, *_handler, *_service) cluster by design; diff the members"
+  else
+    note "same suffix is a lead only: diff the members before calling them duplicates"
+  fi
 else
   echo "   (no clusters of 3+)"
 fi
 
 h "4. DUPLICATION - files defining a variant table (cva / tailwind-variants)"
-out=$(search l "$SRC_EXT" "(^|[^A-Za-z0-9_])(cva|tv)\(" "${TARGET[@]}" | head -30)
-printf '%s\n' "${out:-   (none)}"
-note "overlapping variant tables are the strongest consolidation signal"
+if [ "$HAS_JS" = 0 ]; then
+  note "$NO_JS"
+else
+  out=$(search l "$SRC_EXT" "(^|[^A-Za-z0-9_])(cva|tv)\(" "${TARGET[@]}" | head -30)
+  printf '%s\n' "${out:-   (none)}"
+  note "overlapping variant tables are the strongest consolidation signal"
+fi
 
 h "5. CONSISTENCY - hand-rolled loaders"
-hits "$UI_EXT" "animate-spin|Loader2|<Spinner|<CircularProgress"
-note "compare against the loader/skeleton primitive the repo docs sanction"
+if [ "$HAS_UI" = 0 ]; then
+  note "$NO_UI"
+else
+  hits "$UI_EXT" "animate-spin|Loader2|<Spinner|<CircularProgress"
+  note "compare against the loader/skeleton primitive the repo docs sanction"
+fi
 
 h "6. CONSISTENCY - raw palette / inline colour (design-token bypass)"
-has_dep tailwindcss || has_dep '@tailwindcss/[a-z-]+' || note "Tailwind not detected in package.json: palette matches may not apply"
-COLORS='slate|gray|zinc|neutral|stone|red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose'
-hits "$UI_EXT" "(text|bg|border|ring|fill|stroke|from|via|to|outline|divide|decoration|accent|caret|placeholder)-(${COLORS})-[0-9]{2,3}|(text|bg|border)-(white|black)([^A-Za-z0-9-]|\$)|(text|bg|border|from|to|via)-\[#|style=\{\{[^}]*(colou?r|background)"
-note "false positives: email templates, OG-image renderers, canvas/chart configs that need literal colours"
+if [ "$HAS_UI" = 0 ]; then
+  note "$NO_UI"
+else
+  has_dep tailwindcss || has_dep '@tailwindcss/[a-z-]+' || note "Tailwind not detected in package.json: palette matches may not apply"
+  COLORS='slate|gray|zinc|neutral|stone|red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose'
+  hits "$UI_EXT" "(text|bg|border|ring|fill|stroke|from|via|to|outline|divide|decoration|accent|caret|placeholder)-(${COLORS})-[0-9]{2,3}|(text|bg|border)-(white|black)([^A-Za-z0-9-]|\$)|(text|bg|border|from|to|via)-\[#|style=\{\{[^}]*(colou?r|background)"
+  note "false positives: email templates, OG-image renderers, canvas/chart configs that need literal colours"
+fi
 
 h "7. CONSISTENCY - malformed utility classes (botched find/replace)"
-hits "$UI_EXT" "(bg|text|border|ring|from|via|to|fill|stroke|shadow)-[a-z0-9-]+/[0-9]+/[0-9]+"
-note "a doubled opacity suffix such as bg-muted/50/50 is not a class; Tailwind drops it silently"
+if [ "$HAS_UI" = 0 ]; then
+  note "$NO_UI"
+else
+  hits "$UI_EXT" "(bg|text|border|ring|from|via|to|fill|stroke|shadow)-[a-z0-9-]+/[0-9]+/[0-9]+"
+  note "a doubled opacity suffix such as bg-muted/50/50 is not a class; Tailwind drops it silently"
+fi
 
 h "8. CONSISTENCY - date/number formatting outside shared helpers"
-hits "$SRC_EXT" "toLocaleDateString|toLocaleTimeString|toLocaleString\(|Intl\.(NumberFormat|DateTimeFormat|RelativeTimeFormat)"
-note "the top file is often the shared helper itself; the others bypass it"
+if [ "$HAS_JS" = 0 ]; then
+  note "$NO_JS"
+else
+  hits "$SRC_EXT" "toLocaleDateString|toLocaleTimeString|toLocaleString\(|Intl\.(NumberFormat|DateTimeFormat|RelativeTimeFormat)"
+  note "the top file is often the shared helper itself; the others bypass it"
+fi
 
 h "9. CONSISTENCY - hard-coded UI strings (i18n bypass)"
 I18N=0
@@ -293,7 +424,9 @@ for dep in next-intl react-intl i18next react-i18next next-i18next vue-i18n svel
   has_dep "$dep" && I18N=1
 done
 for d in messages locales i18n lang; do [ -d "$d" ] && I18N=1; done
-if [ "$I18N" = 1 ]; then
+if [ "$HAS_UI" = 0 ]; then
+  note "$NO_UI"
+elif [ "$I18N" = 1 ]; then
   if [ "$HAVE_RG" = 1 ]; then L='\p{L}'; else L='[[:alpha:]]'; fi
   hits "$UI_EXT" ">[^<>{}]*${L}{3,}[^<>{}]*<|(placeholder|title|alt|aria-label|label)=\"[^\"{]*${L}{3,}"
   note "noise: generics/comparisons, brand names, dev-only pages, templates rendered without the i18n runtime"
@@ -303,11 +436,15 @@ fi
 
 h "10. CONSISTENCY - physical left/right classes (RTL bypass)"
 RTL=0
-[ -n "$(search l "$SRC_EXT,css,html" "dir=[\"'{]*rtl|(^|[^A-Za-z])rtl:|DirectionProvider|direction:[[:space:]]*rtl" "${ROOTS[@]}" | head -1)" ] && RTL=1
-for d in messages locales; do
-  [ -d "$d" ] && ls "$d" 2>/dev/null | grep -Eq '^(he|ar|fa|ur|yi)([._-]|$)' && RTL=1
-done
-if [ "$RTL" = 1 ]; then
+if [ "$HAS_UI" = 1 ]; then
+  [ -n "$(search l "$SRC_EXT,css,html" "dir=[\"'{]*rtl|(^|[^A-Za-z])rtl:|DirectionProvider|direction:[[:space:]]*rtl" "${ROOTS[@]}" | head -1)" ] && RTL=1
+  for d in messages locales; do
+    [ -d "$d" ] && ls "$d" 2>/dev/null | grep -Eq '^(he|ar|fa|ur|yi)([._-]|$)' && RTL=1
+  done
+fi
+if [ "$HAS_UI" = 0 ]; then
+  note "$NO_UI"
+elif [ "$RTL" = 1 ]; then
   SEP=$'[[:space:]"\'`:]'
   hits "$UI_EXT" "(^|${SEP})-?(ml|mr|pl|pr|left|right|rounded-l|rounded-r|rounded-tl|rounded-tr|rounded-bl|rounded-br|border-l|border-r|scroll-ml|scroll-mr)-[0-9a-z\[]|(^|${SEP})(text-left|text-right|border-l|border-r)(${SEP}|\$)"
   note "logical equivalents: ms/me, ps/pe, start/end, text-start/text-end, rounded-s/e, border-s/e"
@@ -316,7 +453,7 @@ else
 fi
 
 h "11. SIMPLICITY - largest source files in scope"
-list_files "$SRC_EXT" "${TARGET[@]}" >"$WORK/src"
+list_files "$SCOPE_EXT" "${TARGET[@]}" >"$WORK/src"
 if [ -s "$WORK/src" ]; then
   tr '\n' '\0' <"$WORK/src" | xargs -0 wc -l 2>/dev/null | grep -v ' total$' | sort -rn | head -15
 else
@@ -324,46 +461,63 @@ else
 fi
 
 h "12. PERFORMANCE - client components (push interactivity to leaves)"
-search l "$SRC_EXT" "^[[:space:]]*${Q}use client${Q}" "${TARGET[@]}" >"$WORK/client"
-printf '   in scope: %s\n' "$(wc -l <"$WORK/client" | tr -d ' ')"
-head -15 "$WORK/client" | sed 's/^/     /'
-note "highest value: public/marketing routes and layouts marked client"
+if [ "$HAS_JS" = 0 ]; then
+  note "$NO_JS"
+else
+  search l "$SRC_EXT" "^[[:space:]]*${Q}use client${Q}" "${TARGET[@]}" >"$WORK/client"
+  printf '   in scope: %s\n' "$(wc -l <"$WORK/client" | tr -d ' ')"
+  head -15 "$WORK/client" | sed 's/^/     /'
+  note "highest value: public/marketing routes and layouts marked client"
+fi
 
 h "13. PERFORMANCE - fan-out, awaits in loops, fetch without a timeout"
 sub() { [ -n "$2" ] && { echo "   $1:"; printf '%s\n' "$2" | sed 's/^/     /'; }; }
-sub "fan-out" "$(search n "$SRC_EXT" "Promise\.(all|allSettled)\(" "${TARGET[@]}" | cut -c1-200 | head -15)"
-sub "async callbacks / for-await (N+1 candidates)" "$(search n "$SRC_EXT" "\.(map|forEach|flatMap)\(async|for await[[:space:]]*\(" "${TARGET[@]}" | cut -c1-200 | head -10)"
-sub "outbound fetch" "$(search n "$SRC_EXT" "await fetch\(" "${TARGET[@]}" | cut -c1-200 | head -10)"
-note "check each array is bounded (chunk large fan-outs) and each outbound fetch has an abort signal/timeout"
+if [ "$HAS_JS" = 1 ]; then
+  sub "fan-out" "$(search n "$SRC_EXT" "Promise\.(all|allSettled)\(" "${TARGET[@]}" | cut -c1-200 | head -15)"
+  sub "async callbacks / for-await (N+1 candidates)" "$(search n "$SRC_EXT" "\.(map|forEach|flatMap)\(async|for await[[:space:]]*\(" "${TARGET[@]}" | cut -c1-200 | head -10)"
+  sub "outbound fetch" "$(search n "$SRC_EXT" "await fetch\(" "${TARGET[@]}" | cut -c1-200 | head -10)"
+  note "check each array is bounded (chunk large fan-outs) and each outbound fetch has an abort signal/timeout"
+fi
+if [ -n "$OTHER_EXT" ]; then
+  # Python and Go shapes. Per-row ORM reads and other languages need the LENSES.md follow-ups.
+  sub "fan-out ($OTHER_EXT)" "$(search n "$OTHER_EXT" "asyncio\.gather\(|ThreadPoolExecutor|go func\(" "${TARGET[@]}" | cut -c1-200 | head -15)"
+  sub "outbound HTTP ($OTHER_EXT)" "$(search n "$OTHER_EXT" "requests\.(get|post|put|patch|delete|request)\(|httpx\.|http\.(Get|Post|Head)\(|http\.NewRequest" "${TARGET[@]}" | cut -c1-200 | head -10)"
+  note "bound each fan-out and give each HTTP call a timeout: Python requests and Go's default client have none"
+fi
+[ "$HAS_JS" = 0 ] && [ -z "$OTHER_EXT" ] && echo "   (no source files)"
 
 h "14. BUNDLE - heavy dependencies imported from app code"
-HEAVY='pdfjs-dist|react-pdf|@react-pdf/renderer|jspdf|html2canvas|@tiptap/[a-z-]+|quill|draft-js|lexical|monaco-editor|@monaco-editor/react|@codemirror/[a-z-]+|recharts|chart\.js|react-chartjs-2|echarts|d3|plotly\.js|three|@react-three/fiber|mapbox-gl|maplibre-gl|leaflet|@faker-js/faker|canvas-confetti|lottie-web|lottie-react|xlsx|exceljs|moment|lodash|highlight\.js|prismjs|shiki|firebase|@dnd-kit/[a-z-]+'
-out=$(search n "$SRC_EXT" "from[[:space:]]*${Q}(${HEAVY})(/${NQ}*)?${Q}|import\([[:space:]]*${Q}(${HEAVY})" "${TARGET[@]}" | cut -c1-200 | head -20)
-printf '%s\n' "${out:-   (none)}"
-note "a hit matters if the file is client code and the import is not lazy-loaded"
-echo "   two libraries doing one job (from package.json):"
-dup_libs() {
-  local label="$1" found="" d
-  shift
-  for d in "$@"; do has_dep "$d" && found="$found $d"; done
-  [ "$(echo $found | wc -w | tr -d ' ')" -gt 1 ] && echo "     $label:$found"
-}
-{
-  dup_libs icons lucide-react react-icons @heroicons/react @tabler/icons-react @phosphor-icons/react @radix-ui/react-icons @fortawesome/react-fontawesome
-  dup_libs dates moment dayjs date-fns luxon
-  dup_libs "class names" clsx classnames
-  dup_libs animation framer-motion motion react-spring @react-spring/web gsap
-  dup_libs http axios ky got node-fetch superagent
-  dup_libs validation zod yup joi valibot superstruct
-  dup_libs state redux @reduxjs/toolkit zustand jotai recoil mobx valtio
-  dup_libs "data fetching" swr @tanstack/react-query
-  dup_libs "css-in-js" styled-components @emotion/react @emotion/styled @stitches/react
-  dup_libs charts recharts chart.js echarts @nivo/core victory
-} >"$WORK/duplibs"
-if [ -s "$WORK/duplibs" ]; then cat "$WORK/duplibs"; else echo "     (none)"; fi
+if [ ! -f package.json ]; then
+  note "no package.json: skipped; bundle size applies to JS front-ends"
+else
+  HEAVY='pdfjs-dist|react-pdf|@react-pdf/renderer|jspdf|html2canvas|@tiptap/[a-z-]+|quill|draft-js|lexical|monaco-editor|@monaco-editor/react|@codemirror/[a-z-]+|recharts|chart\.js|react-chartjs-2|echarts|d3|plotly\.js|three|@react-three/fiber|mapbox-gl|maplibre-gl|leaflet|@faker-js/faker|canvas-confetti|lottie-web|lottie-react|xlsx|exceljs|moment|lodash|highlight\.js|prismjs|shiki|firebase|@dnd-kit/[a-z-]+'
+  out=$(search n "$SRC_EXT" "from[[:space:]]*${Q}(${HEAVY})(/${NQ}*)?${Q}|import\([[:space:]]*${Q}(${HEAVY})" "${TARGET[@]}" | cut -c1-200 | head -20)
+  printf '%s\n' "${out:-   (none)}"
+  note "a hit matters if the file is client code and the import is not lazy-loaded"
+  echo "   two libraries doing one job (from package.json):"
+  dup_libs() {
+    local label="$1" found="" d
+    shift
+    for d in "$@"; do has_dep "$d" && found="$found $d"; done
+    [ "$(echo $found | wc -w | tr -d ' ')" -gt 1 ] && echo "     $label:$found"
+  }
+  {
+    dup_libs icons lucide-react react-icons @heroicons/react @tabler/icons-react @phosphor-icons/react @radix-ui/react-icons @fortawesome/react-fontawesome
+    dup_libs dates moment dayjs date-fns luxon
+    dup_libs "class names" clsx classnames
+    dup_libs animation framer-motion motion react-spring @react-spring/web gsap
+    dup_libs http axios ky got node-fetch superagent
+    dup_libs validation zod yup joi valibot superstruct
+    dup_libs state redux @reduxjs/toolkit zustand jotai recoil mobx valtio
+    dup_libs "data fetching" swr @tanstack/react-query
+    dup_libs "css-in-js" styled-components @emotion/react @emotion/styled @stitches/react
+    dup_libs charts recharts chart.js echarts @nivo/core victory
+  } >"$WORK/duplibs"
+  if [ -s "$WORK/duplibs" ]; then cat "$WORK/duplibs"; else echo "     (none)"; fi
+fi
 
 h "15. COST - outbound paid-service calls and schedules"
-out=$(search n "$SRC_EXT" "resend\.|\.emails\.send|sendEmail\(|sendMail\(|sgMail\.|postmark|generateText\(|generateObject\(|streamText\(|streamObject\(|embed(Many)?\(|chat\.completions|messages\.create\(|responses\.create\(|PutObjectCommand|GetObjectCommand|getSignedUrl\(" "${TARGET[@]}" | cut -c1-200 | head -25)
+out=$(search n "$SCOPE_EXT" "resend\.|\.emails\.send|sendEmail\(|sendMail\(|send_email\(|send_mail\(|sgMail\.|postmark|generateText\(|generateObject\(|streamText\(|streamObject\(|embed(Many)?\(|chat\.completions|messages\.create\(|responses\.create\(|PutObjectCommand|GetObjectCommand|getSignedUrl\(|put_object\(|get_object\(|generate_presigned_url\(" "${TARGET[@]}" | cut -c1-200 | head -25)
 printf '%s\n' "${out:-   (no outbound service calls matched)}"
 echo "   schedules:"
 {
@@ -371,16 +525,33 @@ echo "   schedules:"
     [ -f "$f" ] && grep -nE '"?(schedule|cron|crons|path)"?[[:space:]]*[:=]' "$f" 2>/dev/null | sed "s#^#     $f:#"
   done
   [ -d .github/workflows ] && grep -nHE '^[[:space:]-]*cron:' .github/workflows/*.y*ml 2>/dev/null | sed 's#^#     #'
+  [ -f .gitlab-ci.yml ] && grep -nE 'CI_PIPELINE_SOURCE.*schedule' .gitlab-ci.yml 2>/dev/null | sed 's#^#     .gitlab-ci.yml:#'
 } | head -30 >"$WORK/sched"
 if [ -s "$WORK/sched" ]; then cat "$WORK/sched"; else echo "     (none found)"; fi
 note "cost = calls per run x runs per day x rows/users. Check loops, batching, rate limits, idempotency keys."
 
 h "16. DRIFT - any / suppressions / TODO"
-printf '   any: %s   ts-ignore/expect-error/nocheck: %s   eslint-disable: %s   TODO/FIXME/HACK: %s\n' \
-  "$(search n "$TS_EXT" "(:|[[:space:]]as|<)[[:space:]]*any([^A-Za-z0-9_]|\$)" "${TARGET[@]}" | wc -l | tr -d ' ')" \
-  "$(search n "$SRC_EXT" "@ts-(ignore|expect-error|nocheck)" "${TARGET[@]}" | wc -l | tr -d ' ')" \
-  "$(search n "$SRC_EXT" "eslint-disable" "${TARGET[@]}" | wc -l | tr -d ' ')" \
-  "$(search n "$SRC_EXT" "(TODO|FIXME|HACK)([^A-Za-z]|\$)" "${TARGET[@]}" | wc -l | tr -d ' ')"
+TODOS=$(search n "$SCOPE_EXT" "(TODO|FIXME|HACK)([^A-Za-z]|\$)" "${TARGET[@]}" | wc -l | tr -d ' ')
+if [ "$HAS_JS" = 1 ]; then
+  printf '   any: %s   ts-ignore/expect-error/nocheck: %s   eslint-disable: %s   TODO/FIXME/HACK: %s\n' \
+    "$(search n "$TS_EXT" "(:|[[:space:]]as|<)[[:space:]]*any([^A-Za-z0-9_]|\$)" "${TARGET[@]}" | wc -l | tr -d ' ')" \
+    "$(search n "$SRC_EXT" "@ts-(ignore|expect-error|nocheck)" "${TARGET[@]}" | wc -l | tr -d ' ')" \
+    "$(search n "$SRC_EXT" "eslint-disable" "${TARGET[@]}" | wc -l | tr -d ' ')" \
+    "$TODOS"
+else
+  printf '   TODO/FIXME/HACK: %s\n' "$TODOS"
+fi
+# supp EXTS LABEL PATTERN: a suppression count, only for languages present in scope.
+supp() {
+  overlap "$1" "$SCOPE_EXT" || return 0
+  printf '   %s: %s\n' "$2" "$(search n "$1" "$3" "${TARGET[@]}" | wc -l | tr -d ' ')"
+}
+supp py "python type: ignore / noqa / pragma: no cover" "#[[:space:]]*(type:[[:space:]]*ignore|noqa|pragma:[[:space:]]*no cover)"
+supp go "go nolint" "//[[:space:]]*nolint"
+supp rs "rust allow(...) attributes" "#!?\[allow\("
+supp rb "ruby rubocop:disable" "rubocop:disable"
+supp php "php phpstan/psalm ignores" "@phpstan-ignore|@psalm-suppress"
+supp java,kt "jvm @Suppress / @SuppressWarnings" "@Suppress(Warnings)?\("
 
 printf '\n\n-- end of scan. Nothing above is a finding until you have read the file. --\n'
 exit 0

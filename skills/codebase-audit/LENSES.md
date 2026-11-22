@@ -4,9 +4,11 @@ Every command here produces **leads**. Open the file and read it before a lead b
 
 Conventions used below:
 
-- `<pm>` is the repo's package manager, from the lockfile: `bun.lock`/`bun.lockb` → bun, `pnpm-lock.yaml` → pnpm, `yarn.lock` → yarn, otherwise npm. Always call scripts as `<pm> run <script>`. Some managers have built-ins that shadow script names: `bun test` runs Bun's own test runner and `bun ci` is not the `ci` script, so neither runs the repo's gates.
-- `<src>` is the scope, or the repo's source roots (`src app components features lib ...`, whichever exist).
+- `<pm>` is the repo's package manager, from the lockfile. JS: `bun.lock`/`bun.lockb` → bun, `pnpm-lock.yaml` → pnpm, `yarn.lock` → yarn, otherwise npm. Python: `uv.lock` → uv, `poetry.lock` → poetry, `Pipfile.lock` → pipenv, else pip. Others: `Cargo.lock` → cargo, `go.mod` → go, `Gemfile.lock` → bundler, `composer.lock` → composer, `mix.lock` → mix. When a `Makefile`, `justfile`, or `Taskfile.yml` wraps the gates, use its targets.
+- Always call JS scripts as `<pm> run <script>`. Some managers have built-ins that shadow script names: `bun test` runs Bun's own test runner and `bun ci` is not the `ci` script, so neither runs the repo's gates.
+- `<src>` is the scope, or the repo's source roots (`src app components features lib ...`, `cmd internal pkg` in Go, the package directory in Python, whichever exist).
 - Commands use `rg`. Without ripgrep, use `grep -rnE --include='*.tsx' --exclude-dir=node_modules ...` instead.
+- Many detectors below are written for JS/TS and React. They are examples: port the pattern to the repo's language and framework before concluding "none", and skip the ones that cannot apply.
 
 ---
 
@@ -14,10 +16,10 @@ Conventions used below:
 
 | Detector | How |
 |---|---|
-| Unused files, exports, dependencies | `<pm> run knip` if the repo has the script, else `node_modules/.bin/knip`. Read the knip config's `ignore` and `entry` lists first, because a directory it ignores is invisible to it. |
-| Unreferenced component file | `bash <component-drilldown-skill>/scripts/find-usages.sh <path>` if that skill is installed, otherwise grep the import specifier. knip can report a dead export but miss a whole file kept alive by one live sibling export. |
-| Unused variant | grep the variant key across `<src>`. Zero hits outside the `cva`/`tv` block means a dead variant. |
-| Unused design token | list the custom properties in the global stylesheet (`rg -o -- '--[a-z0-9-]+:' <globals.css>`), then grep each name across the theme config and `<src>`. |
+| Unused files, exports, dependencies | JS/TS: `<pm> run knip` if the repo has the script, else `node_modules/.bin/knip`. Read the knip config's `ignore` and `entry` lists first, because a directory it ignores is invisible to it. Other stacks, only if the tool is already in the repo's dev dependencies or on PATH (never install one during an audit): Python `vulture` (unused code) and `deptry` (unused dependencies); Go `staticcheck` (check `U1000`) or `deadcode`; Rust the compiler's `dead_code` warnings and `cargo machete` (unused dependencies). |
+| Unreferenced component or module file | the `component-drilldown` skill's usage finder if that skill is installed, otherwise grep the import specifier or module path. knip can report a dead export but miss a whole file kept alive by one live sibling export. |
+| Unused variant | grep the variant key across `<src>`. Zero hits outside the variant table (the `cva`/`tv` block, or the repo's equivalent) means a dead variant. |
+| Unused design token | list the custom properties in the global stylesheet or token file (`rg -o -- '--[a-z0-9-]+:' <globals.css>`), then grep each name across the theme config and `<src>`. |
 | Unused translation key | the repo's i18n validator, if any. Its "unused" output is mostly false positives, because keys are built at runtime (`` t(`status.${value}`) ``). Trust a key only if it is dead in the validator **and** no dynamic construction can reach it. Never mass-delete keys. |
 | Dead DB column or table | grep the column name across the schema, queries, and app code. A column that is written and never read is a real finding. The DROP is a separate ticket that ships after the code stops referencing it has deployed. |
 
@@ -25,8 +27,9 @@ Conventions used below:
 
 - File-system entrypoints: framework routes and layouts (`page`, `layout`, `route`, `+page`, `pages/`, `routes/`), middleware, server-action files the knip config lists as entries, service workers, web workers.
 - Files run by name: CLI and CI scripts, cron targets, migrations, config files a tool loads by convention.
-- Anything referenced from outside TypeScript: translation files, SQL, MDX or CMS content, email templates rendered by name, hosting config (cron paths, rewrites), webhook endpoints registered with a third party, tracker or CI configuration.
-- Dynamic references: `import()` with a computed path, `import.meta.glob`, string-keyed component registries, dependency-injection containers, auto-imported components (Nuxt, unplugin).
+- Anything referenced from outside the source language: translation files, SQL, MDX or CMS content, email templates rendered by name, hosting config (cron paths, rewrites), webhook endpoints registered with a third party, tracker or CI configuration.
+- Dynamic references: `import()` with a computed path, `import.meta.glob`, string-keyed component registries, dependency-injection containers, auto-imported components (Nuxt, unplugin), reflection.
+- Code a framework finds by name, path, or decorator: Rails and Laravel autoloading, Django apps and management commands, route and task handlers registered by decorator, pytest fixtures, Python entry points in `pyproject.toml`, Go `init()` functions and build-tagged files.
 
 **Evidence bar:** the usage search output showing zero consumers, plus a note naming the dynamic references you ruled out.
 
@@ -36,9 +39,9 @@ Conventions used below:
 
 | Detector | How |
 |---|---|
-| Near-duplicate names | the scan clusters component files by trailing name token (`*-card`, `*Badge`, `*-empty-state`, `*-form`) and lists the members |
+| Near-duplicate names | the scan clusters component files by trailing name token (`*-card`, `*Badge`, `*-empty-state`, `*-form`) and lists the members. In a repo with no UI files it clusters source files instead (`*_service`, `*_handler`). |
 | Parallel variant tables | `rg -l 'cva\(|tv\(' <src>`, then compare the variant tables for overlap |
-| Copy-pasted logic | shape scans such as `rg -n 'useEffect\(' <domain> -A6`, and duplicated validation schemas (`rg -n 'z\.object\(' <src> -A8`) |
+| Copy-pasted logic | shape scans such as `rg -n 'useEffect\(' <domain> -A6`, and duplicated validation schemas (`rg -n 'z\.object\(' <src> -A8`, or the stack's own: Pydantic models, serializers, form classes) |
 | Duplicated query | the same filter or `where` clause rebuilt in several handlers instead of one data-access helper |
 
 **Confirm by diffing the two implementations.** Same-shaped markup is not duplication if the semantics differ: a status badge and a plan-tier badge can look alike and still belong to different vocabularies. Check whether the repo docs keep them apart on purpose.
@@ -51,13 +54,15 @@ Conventions used below:
 
 Look for the same user-visible pattern implemented differently. First find the sanctioned version in the repo docs or the shared component directory.
 
+The greps below target web UIs built with JSX and Tailwind. For other styling (CSS modules, CSS-in-JS) or server templates (ERB, Jinja, Blade), port them or skip them. Backend code has its own version of this lens: error responses, logging, config access, and retries built differently in each handler.
+
 - **Loaders**: `rg -n 'animate-spin|Loader2|<Spinner' <src>` outside buttons, inputs, and table rows. Compare with the repo's skeleton or loading primitive.
 - **Status colours**: status classes (`bg-success`, `text-destructive`, ...) applied ad hoc through `className` instead of a badge variant. A boolean shown as a badge should use the same pair of colours everywhere.
 - **Raw palette and inline colour**: `text-white`, `bg-gray-100`, `from-blue-500`, arbitrary `bg-[#...]`, `style={{ color }}`, where the repo uses semantic design tokens. Email templates, OG-image renderers, and chart configs often need literal colours; those are not findings.
-- **Malformed classes**: a botched find-and-replace leaves strings such as `bg-muted/50/50` (a doubled opacity suffix). Tailwind silently drops them, so the element loses its background with no error.
+- **Malformed classes** (Tailwind): a botched find-and-replace leaves strings such as `bg-muted/50/50` (a doubled opacity suffix). Tailwind silently drops them, so the element loses its background with no error.
 - **Empty states**: hand-rolled "no results" markup instead of the shared empty-state component.
-- **Dates, numbers, currency**: `toLocaleDateString`, `toLocaleString(`, or `Intl.NumberFormat` outside the shared formatter module. Inline formatting drifts in locale and timezone.
-- **Untranslated strings** (only if the repo has i18n): literal text in JSX or in `placeholder`/`title`/`aria-label` instead of the translation function.
+- **Dates, numbers, currency**: `toLocaleDateString`, `toLocaleString(`, or `Intl.NumberFormat` (or `strftime` and hand-built format strings in other languages) outside the shared formatter module. Inline formatting drifts in locale and timezone.
+- **Untranslated strings** (only if the repo has i18n): literal text in JSX or templates, or in `placeholder`/`title`/`aria-label`, instead of the translation function.
 - **Direction** (only if the app supports RTL): physical classes (`ml-`, `pr-`, `left-`, `text-left`, `rounded-l`) where logical ones (`ms-`, `pe-`, `start-`, `text-start`, `rounded-s`) belong.
 - **Responsiveness**: viewport breakpoints (`sm:`, `md:`) inside a reusable component that the repo builds with container queries.
 - **Tables and filters**: list pages that skip the shared table component or the repo's URL-synced filter pattern.
@@ -67,11 +72,11 @@ Look for the same user-visible pattern implemented differently. First find the s
 ## 4. Simplicity
 
 - A wrapper component, hook, or util with **one** call site that adds no behaviour: inline it.
-- A `Record<string, ...>` config or strategy map with two entries: use an `if`.
+- A `Record<string, ...>` config, dict, or strategy map with two entries: use an `if`.
 - A generic type parameter instantiated at exactly one type.
 - A service layer that only forwards to the data layer, in a repo that does not otherwise use one.
 - Prop drilling more than two levels where a colocated read would do, or a context with a single consumer.
-- `useMemo`/`useCallback` around a trivial expression: cost with no benefit.
+- React: `useMemo`/`useCallback` around a trivial expression: cost with no benefit.
 - Defensive branches for states the types make impossible.
 
 **Detector:** the scan lists the largest files and, for a scoped run, single-importer components. The rest is reading.
@@ -80,17 +85,19 @@ Look for the same user-visible pattern implemented differently. First find the s
 
 ## 5. Performance (runtime)
 
-- `'use client'` (or the framework's equivalent) on a component whose interactivity could move to a leaf. Public and marketing pages pay the most for this.
-- Sequential `await`s in a server handler that could run as one `Promise.all`.
-- **Unbounded** fan-out: `rg -n 'Promise\.all\(' <src>`, then check that the array size is bounded. Database drivers, HTTP clients, and provider rate limits fail at high concurrency, so large batches need chunking.
-- N+1: an `await` inside `.map` or a `for` loop over rows. Multi-line loops need `rg -nU 'for \([^)]*\) \{[^}]*await '`. Never load a very large table into memory to filter it.
-- Outbound `fetch` with no abort signal or timeout.
+- `'use client'` (React Server Components, or the framework's equivalent) on a component whose interactivity could move to a leaf. Public and marketing pages pay the most for this.
+- Sequential `await`s in a server handler that could run as one `Promise.all` (`asyncio.gather` in Python, an errgroup in Go).
+- **Unbounded** fan-out: `rg -n 'Promise\.all\(' <src>` (or `asyncio\.gather\(`, `go func\(` in a loop), then check that the array size is bounded. Database drivers, HTTP clients, and provider rate limits fail at high concurrency, so large batches need chunking.
+- N+1: an `await` inside `.map` or a `for` loop over rows. Multi-line loops need `rg -nU 'for \([^)]*\) \{[^}]*await '`. In ORMs, a relation read per row: Django without `select_related`/`prefetch_related`, Rails without `includes`. Never load a very large table into memory to filter it.
+- Outbound HTTP with no timeout: `fetch` with no abort signal, Python `requests` without `timeout=`, Go's default `http.Client`.
 - Long lists rendered without virtualization.
 - Caching: pages or routes forced dynamic where a cached or tagged response would do.
 
 ---
 
 ## 6. Bundle size
+
+Web front-ends only. Skip this lens when nothing ships to a browser.
 
 - Heavy dependencies reachable from client code: PDF renderers, rich-text editors, chart and map libraries, fake-data generators, confetti, full date-library locales. Grep the import, then check whether the importing file is client code and whether the import is lazy (`next/dynamic`, `React.lazy`, `import()`).
 - Modals, editors, and viewers that load eagerly but open rarely.
@@ -127,5 +134,7 @@ For any finding that deletes or consolidates code, discover the repo's gate scri
 ```bash
 <pm> run typecheck && <pm> run knip && <pm> run test
 ```
+
+Or the repo's equivalents, for example `make lint test`, `uv run pytest`, `go vet ./... && go test ./...`, or `cargo clippy && cargo test`.
 
 Do not run fixers or make edits as part of the audit. The implementer runs these gates.
