@@ -1,3 +1,5 @@
+// GitHub only: inventories, replies to, resolves, and verifies PR review threads through `gh` (REST + GraphQL).
+// Runs with `node` 22.18+ or `bun`. For GitLab, Bitbucket Cloud, and Azure DevOps, follow REFERENCE.md.
 import { spawnSync } from 'node:child_process';
 import { readFileSync, realpathSync, statSync } from 'node:fs';
 import { isAbsolute, relative, resolve, sep } from 'node:path';

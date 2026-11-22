@@ -4,15 +4,29 @@
 
 Read these in order, and stop guessing once a source answers:
 
-1. `AGENTS.md`, `CLAUDE.md` and any design doc they link. A chosen direction (for example, "deep-teal hero, sand buttons, rounded-xl") is binding: the variants explore inside it, not around it.
+1. `AGENTS.md`, `CLAUDE.md` (or the agent's own instructions file) and any design doc they link. A chosen direction (for example, "deep-teal hero, sand buttons, rounded-xl") is binding: the variants explore inside it, not around it.
 2. **Tokens**:
    ```bash
-   grep -rn --include='*.css' -E '@theme|^:root|--color-|--radius|--font' src app styles 2>/dev/null | head -80
-   ls tailwind.config.* tokens.json design-tokens.* 2>/dev/null
+   grep -rn --include='*.css' --include='*.scss' --include='*.less' --include='*.vue' --include='*.svelte' \
+     -E '@theme|:root|--color-|--radius|--font' src app styles 2>/dev/null | head -80
+   find . -maxdepth 1 \( -name 'tailwind.config.*' -o -name 'uno.config.*' -o -name 'panda.config.*' -o -name 'stitches.config.*' \
+     -o -name 'tokens.json' -o -name '*.tokens.json' -o -name 'design-tokens.*' -o -name tokens \)
    ```
-   Copy the hex or oklch values into the board's `:root` under the product's own token names (`--primary`, `--sage` and so on), so a variant's CSS reads like the product's classes.
-3. **Type**: the font family and weights the app loads (`next/font`, `@font-face`, the Fonts link), and the type scale (`text-h1`, `text-lead` and similar utilities). Load the same family from Google Fonts, with only the weights the product loads. A weight the product does not ship (such as 300) shows nothing it can build.
-4. **Shape**: the radius scale, border and hairline colours, shadows, and button and card variants (`components/ui/button.tsx` and the like). Recreate the button variants as board classes.
+   Where the values live, by stack:
+
+   | Stack | Read |
+   | --- | --- |
+   | CSS variables, Tailwind v4 | `:root`, `.dark` / `[data-theme]` blocks and `@theme` in the global stylesheet |
+   | Tailwind v3, UnoCSS | `theme` / `theme.extend` in `tailwind.config.*` or `uno.config.*` |
+   | Sass, Less | `$name` or `@name` variables, usually in a `_variables` or `abstracts/` partial; Bootstrap themes override its `$primary` and friends there |
+   | CSS-in-JS theme (MUI, Chakra, Mantine, styled-components, Emotion) | The theme object passed to the theme provider (`createTheme`, `extendTheme`, `createSystem` and the like) |
+   | Panda, Stitches, vanilla-extract | `theme.tokens` and `semanticTokens` in `panda.config.*`; `createStitches({ theme })`; `createTheme` / `createGlobalTheme` in `*.css.ts` |
+   | Design-token JSON (DTCG, Style Dictionary, Tokens Studio) | The source token files, not the generated build output. Resolve `{group.name}` references. |
+   | Vue, Svelte | The same sources, plus global `<style>` blocks in `App.vue` or the root `+layout.svelte`; Vuetify themes in `createVuetify({ theme })` |
+
+   If the app runs locally, the resolved values are one call away: `getComputedStyle(document.documentElement).getPropertyValue('--primary')`. Copy the hex or oklch values into the board's `:root` under the product's own token names (`--primary`, `--sage` and so on), so a variant's CSS reads like the product's classes.
+3. **Type**: the font family and weights the app loads (`next/font`, `@fontsource/*` packages, `@font-face`, a Google Fonts `<link>` in the root HTML or layout), and the type scale (`text-h1`, `text-lead` and similar utilities). Load the same family from Google Fonts, with only the weights the product loads. A weight the product does not ship (such as 300) shows nothing it can build.
+4. **Shape**: the radius scale, border and hairline colours, shadows, and button and card variants (`components/ui/button.tsx`, `Button.vue`, `button.component.ts`, a `.btn` stylesheet and the like). Recreate the button variants as board classes.
 5. **Logo and icons**: the real SVG path data or file. Inline it. Use the product's icon set, never emoji.
 6. **Contrast**: if the repo has a contrast test, reuse its pairs. Otherwise check every text-on-background pair for AA: 4.5:1 for body text, 3:1 for text at 24 px or larger.
 
@@ -55,7 +69,7 @@ Wire an interaction only when it is the variant's idea: a class picker, a goal f
 
 One single-select question. The header is a short noun ("Contact"). The question includes the board link. Each option is `n · Name`, and its description repeats the reason in one sentence. Mark a recommendation only when you have one: put it first, with "(Recommended)".
 
-Option limits: most question tools allow 4 options plus a free-text "Other". With 5 variants, list 1-4 and add "or type 5" to the question.
+Option limits: most question tools allow 4 options plus a free-text "Other". With 5 variants, list 1-4 and add "or type 5" to the question. Without a question tool, ask in plain text: the link or path, then one numbered line per variant, and "reply with a number, or say what's missing".
 
 ## Iterating
 
@@ -67,7 +81,7 @@ Option limits: most question tools allow 4 options plus a free-text "Other". Wit
 ## Implementing the pick
 
 1. Map the variant onto existing primitives: section and band wrappers, buttons, cards and type utilities. Add a new component only for the variant's new idea, beside the code it replaces.
-2. Pull data the way the app already does (cached readers, server components). Keep presentational parts synchronous and props-driven, so they can be tested without the data layer.
+2. Pull data the way the app already does (its loaders, stores, cached readers or server components). Keep presentational parts synchronous and props-driven, so they can be tested without the data layer.
 3. **Delete what the pick replaces**: old components, now-unused props, messages and tests. Run the repo's dead-code tool (knip or similar) and its i18n unused-key check.
 4. Test the new component: an axe pass, plus one behavioural assertion per channel or interaction (link targets, prefilled message, conditional parts).
 5. Run the repo's full check script, then build and screenshot the real route at 1280 and 390 px. Compare against the board, because the board is the spec.
@@ -76,8 +90,8 @@ Option limits: most question tools allow 4 options plus a free-text "Other". Wit
 ## Gotchas
 
 - **BiDi**: in RTL text, phone numbers, emails, handles (`@name`) and URLs flip or move their punctuation. Wrap each in `dir="ltr"` on the board and in the product. A joined list of mixed names (`כוח MAX · TripleFIT · HYROX`) merges into one LTR run and tears "כוח" away from "MAX". Wrap every item in `<bdi>` and keep the separators outside them.
-- **Artifact limits**: one HTML page, styles inline, scripts only from the allowed CDNs, stylesheets only from Google Fonts. Local paths and `localhost` never load, so embed every image with `assets.py`.
+- **Artifact limits**: one HTML page, styles inline, scripts only from the allowed CDNs, stylesheets only from Google Fonts. Local paths and `localhost` never load, so embed every image with `assets.py`. Keep to these limits for a local `preview.html` too, so the same file works when it is forwarded or hosted.
 - **Image weight**: hero images at 1400 px wide, cards at 360-450 px, faces at 160 px, JPEG quality 70. A board over a few MB loads slowly on a phone.
 - **Fonts**: if the product self-hosts a font that Google Fonts lacks, embed a woff2 subset as a data URI, or say in the intro that the board falls back to a named system font.
-- **Wrapped pages**: artifact hosts wrap the page in a document skeleton, so `template.html` is a fragment that starts at `<title>`. `shoot.mjs` wraps it the same way and writes `preview.html` for opening locally.
+- **Wrapped pages**: artifact hosts wrap the page in a document skeleton, so `template.html` is a fragment that starts at `<title>`. `shoot.mjs` wraps it the same way and writes `<board>-shots/preview.html`, the file to hand over when there is no artifact host.
 - **Stale servers**: when you verify the implementation, build and serve on a free port. Don't trust a long-running dev server that may hold old config, and don't kill one you did not start.

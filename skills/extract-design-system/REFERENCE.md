@@ -4,6 +4,7 @@
 - [README](#readme)
 - [Components](#components)
 - [Publishing](#publishing)
+- [Local bundle](#local-bundle)
 - [Re-sync](#re-sync)
 - [Gotchas](#gotchas)
 
@@ -21,6 +22,10 @@
 | shadcn | `components.json` → its CSS file | Bare HSL channels (`222 47% 11%`) are wrapped in `hsl()`. `calc(var(--radius) - 4px)` is evaluated, with rem converted to px at 16px when units mix. |
 | CSS-in-JS and theme objects (MUI, Chakra, styled-components, vanilla-extract, Panda) | The theme file the scan lists | Flatten nested keys with `-` (`palette.primary.main` → `primary-main`). A light/dark palette pair becomes two themes. |
 | DTCG `*.tokens.json` | The file | Turn every `$value` map into lists. Resolve `{a.b}` references to the type's `{a-b}` alias form. |
+| Style Dictionary | The source files its config lists (often `tokens/**/*.json`), not the generated build output | Values sit under `value` (or `$value` in DTCG mode). Treat them like DTCG. |
+| Sass and Less variables | `$name: value` / `@name: value` in partials (`_variables.scss`, `abstracts/`), and Sass maps (`$colors: (primary: …)`) | The scripts read only custom properties, so copy these by hand under their own names (`$brand-primary` → `brand-primary`), with references resolved to literals. One map or override file per theme becomes one theme. |
+| Panda, Stitches, vanilla-extract | `panda.config.*` `theme.tokens` and `semanticTokens` (a `_dark` condition is the dark theme); `stitches.config.*` `createStitches({ theme })`, plus `createTheme` for other themes; `createTheme` / `createGlobalTheme` in `*.css.ts` | The scan may not list these files; search for them. Flatten nested keys with `-` as above. |
+| Vue, Svelte, Angular | The same sources, plus a global `<style>` block in `App.vue` or the root `+layout.svelte`, Vuetify's `createVuetify({ theme })`, and the global `styles` listed in `angular.json` | The scan reads stylesheet files only. Copy a global `<style>` block into a `.css` file under `<ds>` (write `:global(:root)` as `:root`) and pass that to `css-to-tokens.mjs`. |
 
 Theme order: the light or root theme comes first, because a token with no value in a later theme inherits the first theme's value.
 
@@ -165,11 +170,21 @@ The first sentence is the summary the page shows.
 
 Don't write `tokens.css`, `manifest.json` or `api/`: the page generates them.
 
+## Local bundle
+
+Use this when the agent has no `Artifact` tool, or the account lists no "Design System" type. The bundle is the same `<ds>/project/` tree: `README.md`, `tokens.json`, `components/bundle.css`, a `README.md` and `preview.html` per component, `components/Cover/preview.html`, `assets/` and `fonts/`.
+
+1. Build every file as above. The shapes in this file stand in for the type's reference files, and `check.mjs <ds>` still checks tokens, contrast, previews and the cover. Use the static component route (the live route's steps are in the type's `from-code.md`), and build the cover from colour blocks, one pattern and the name, all bound to tokens.
+2. Skip the asset uploads and `design-system.json`. Assets stay as files under `assets/`. `check.mjs` then warns that the index isn't written and lists files to upload: both are expected here. Don't run `--map`.
+3. Keep it where the user said. Scratch folders can be cleared, so don't leave it only in `<ds>`. A folder inside the repo (such as `docs/design-system/`) is an edit to the repo: only on the user's word.
+4. Copy `<ds>/project/` there and give the absolute path. Say that a preview opened straight from disk is unstyled, because the Design System page injects `tokens.css`, the fonts and `bundle.css`. The README, `tokens.json` and `bundle.css` are what people and agents use directly.
+5. To publish it as an artifact later, run the Publishing steps on the same folder: create, upload the assets, write the index, then `--map`.
+
 ## Re-sync
 
 Use this when the system exists, or when `tokens.json` `meta` names a source.
 
-1. `read` the live index and every file you will change, into `<ds>`. People edit the page, so never work from an older copy.
+1. `read` the live index and every file you will change, into `<ds>`. People edit the page, so never work from an older copy. For a local bundle, copy the folder into `<ds>` instead, and write the result back to the same folder.
 2. Tell the user what `meta` recorded last time (repo, ref, package) and whether it differs from what they named now. Their answer wins.
 3. Re-run the scan and the token script on the current code, then merge. Update changed values, add new tokens and components, and keep usage notes, README prose, assets and anything added on the page. List tokens the code no longer defines, and ask before removing them.
 4. Rewrite `meta`. Set `lastChange.note` to a summary like "re-synced to 9f8e7d6: 3 colours changed, 1 added". Read the index again right before sending, and send only the changed files with the index last.

@@ -1,6 +1,6 @@
 ---
 name: component-drilldown
-description: Explains, fixes, or consolidates UI components in a web app's codebase. Covers what a component is, its variants and props, and every place it is used (resolving relative, alias, and index imports), bringing a component in line with the repo's own conventions, and merging duplicate or overlapping components into one shared primitive with a superset variant API. Use when the user asks what a component does, what variants or props it has, or where it is used; asks to fix a component to follow repo conventions (design tokens, RTL, i18n, typing, imports); or asks to find and merge duplicate components.
+description: Explains, fixes, or consolidates UI components in a web app's codebase, in any framework (React, Vue, Svelte, Angular, Astro, Solid, web components) and styling system. Covers what a component is, its variants and props, and every place it is used (resolving relative, alias, and index imports), bringing a component in line with the repo's own conventions, and merging duplicate or overlapping components into one shared primitive with a superset variant API. Use when the user asks what a component does, what variants or props it has, or where it is used; asks to fix a component to follow repo conventions (design tokens, RTL, i18n, typing, imports); or asks to find and merge duplicate components.
 ---
 
 # Component drilldown
@@ -11,33 +11,34 @@ The source file and its consumers are the ground truth. Docs, inventories, and c
 
 Do this once per repo, before any workflow below.
 
-1. Read `AGENTS.md`, `CLAUDE.md`, and any design doc they link (design tokens, type scale, component rules). The conventions you enforce come from there first.
-2. Find where components live. Check `components.json` (shadcn's `aliases.ui`) first, then look for the usual directories:
+1. Read `AGENTS.md`, `CLAUDE.md` (or the agent's own instructions file), and any design doc they link (design tokens, type scale, component rules). The conventions you enforce come from there first.
+2. Name the framework from the manifest and the file types: `.tsx`/`.jsx` (React, Preact, Solid), `.vue` (Vue, Nuxt), `.svelte` (Svelte, SvelteKit), `angular.json` and `*.component.ts` (Angular), `.astro`, or custom elements (Lit, Stencil). [REFERENCE.md → Frameworks](REFERENCE.md#frameworks) says where each one keeps props, variants and usages.
+3. Find where components live. Check `components.json` (the `aliases.ui` of shadcn/ui, shadcn-vue or shadcn-svelte) first, then look for the usual directories:
    ```bash
    find . \( -name node_modules -o -name .git \) -prune -o -type d \( -name ui -o -name components -o -name primitives -o -name design-system \) -print | head -20
    ```
-   Typical split: shared primitives (`components/ui/`), shared composite trees (`components/<area>/`), and domain components (`features/<domain>/components/`). In a monorepo, also check `packages/ui`.
-3. Note the variant system (`cva`, `tailwind-variants`, CSS modules, styled variants), the import alias (`compilerOptions.paths` in `tsconfig.json` or `jsconfig.json`), and the package manager from the lockfile.
-4. If the repo keeps a component inventory (often under `.context/` or `docs/`), use it as an index. It is a snapshot and can be stale.
+   Typical split: shared primitives (`components/ui/`, `src/lib/components/` in SvelteKit), shared composite trees (`components/<area>/`), and domain components (`features/<domain>/components/`). In a monorepo, also check `packages/ui`. If the primitives come from a component library (MUI, Chakra, Mantine, Ant Design, Vuetify, PrimeVue, Angular Material, an internal `@org/ui` package), the repo's own files are wrappers and theme overrides: drill into those, and take the base props from the package's types or docs.
+4. Note the variant system (`cva`, `tailwind-variants`, Panda or Stitches `variants`, vanilla-extract `recipe`, styled-components or Emotion props, CSS modules, BEM modifier classes in plain CSS or Sass), the import alias (`compilerOptions.paths` in `tsconfig.json` or `jsconfig.json`, `resolve.alias` in the Vite or webpack config, `kit.alias` in `svelte.config.js`, `alias` in `nuxt.config.*`, `imports` in `package.json`), and the package manager from the lockfile (`bun.lock`/`bun.lockb` → bun, `pnpm-lock.yaml` → pnpm, `yarn.lock` → yarn, `package-lock.json` → npm).
+5. If the repo keeps a component inventory (often under `.context/` or `docs/`), use it as an index. It is a snapshot and can be stale.
 
 ## Workflow: explain a component
 
 1. Locate the file by name across the component directories.
-2. Read it. List the exported components, their purpose, and every variant: transcribe each `cva` variant group plus `defaultVariants`, or the union-typed, boolean, and derived-state props (see [REFERENCE.md](REFERENCE.md#reading-variants)).
+2. Read it. List the exported components, their purpose, and every variant: transcribe each variant table (`cva` groups plus `defaultVariants`, or the framework's equivalent), or the union-typed, boolean, and derived-state props (see [REFERENCE.md](REFERENCE.md#reading-variants)).
 3. Find usages:
    ```bash
    bash <skill-dir>/scripts/find-usages.sh <path/to/component.tsx>   # import-resolved consumers
    bash <skill-dir>/scripts/find-usages.sh <ComponentName>           # text search for a symbol
    ```
-   It resolves relative, alias, ESM `.js`-suffixed, and index-directory imports. It lists tests, stories, and mocks separately, and lists same-named modules that resolve elsewhere so you do not count them.
+   It resolves relative, alias, ESM `.js`-suffixed, and index-directory imports in JS/TS, Vue, Svelte and Astro files. For Angular and web components it also lists the templates that render the component's tag, and for a stylesheet (a CSS module, a Sass partial) it lists the files that import it. It lists tests, stories, and mocks separately, and lists same-named modules that resolve elsewhere so you do not count them. Components that are auto-imported or registered globally (Nuxt, `unplugin-vue-components`, `app.component(...)`) have no import: search for their tag instead.
 4. Report: name · path · variants table · key props · consumer files (flag zero consumers) · the routes those consumers render under.
 
 ## Workflow: fix a component
 
 1. **Read the component and all its usages first.** A prop or variant change breaks callers, and tests that render or mock it break too.
 2. Apply the repo's conventions. The [checklist](REFERENCE.md#conventions-checklist) names what to look for; each item applies only if the repo has that system.
-3. If the variant or prop API changed, **update every consumer** in the same change. Without a workbench, only the typechecker catches a stale variant name, and only when variants are typed.
-4. Verify in this order: typecheck → tests → lint (fix mode) → format. Use the repo's scripts as `<pm> run <script>`. Then view a route that mounts the component in the running app.
+3. If the variant or prop API changed, **update every consumer** in the same change. Without a workbench, only the typechecker catches a stale variant name, and only when variants are typed (and, in Vue, Svelte or Angular, only when templates are type-checked too).
+4. Verify in this order: typecheck → tests → lint (fix mode) → format. Use the repo's scripts as `<pm> run <script>`; the typecheck may be `tsc`, `vue-tsc`, `svelte-check` or `ng build`, depending on the framework. Then view a route that mounts the component in the running app.
 
 ## Workflow: consolidate components
 
